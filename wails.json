@@ -1,0 +1,18 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Sailor",
+  "outputfilename": "Sailor",
+  "frontend:install": "",
+  "frontend:build": "",
+  "frontend:dev:watcher": "",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "Sailor"
+  },
+  "info": {
+    "productName": "Sailor",
+    "productVersion": "2.0.0",
+    "copyright": "Copyright © 2026",
+    "comments": "一个面板管理你所有的 Kubernetes 集群"
+  }
+}

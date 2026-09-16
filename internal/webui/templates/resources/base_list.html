@@ -1,0 +1,518 @@
+{{define "content"}}
+<div class="fx-card card bg-base-100 border border-base-300" data-vb-reveal x-data="resourceList()" x-init="init()"
+  @resource-updated.window="
+    const d = $event.detail;
+    if (d && d.action === 'delete') {
+      // force 删除（grace_period_seconds=0）→ K8s 立即清除，从列表直接移除
+      // Pod / Namespace（非 force）→ 有优雅退出期，乐观改状态为 Terminating
+      // 其他资源 → 立即清除，从列表直接移除
+      if (d.force || (d.type !== 'Pod' && d.type !== 'Namespace')) {
+        markRemoved(d.name, d.namespace);
+      } else {
+        markTerminating(d.name, d.namespace);
+      }
+    } else if (d && d.action === 'create' && d.resource) {
+      // 乐观插入新建项，无需等后端 sync 完成
+      markAdded(d.resource);
+    } else if (d && d.action === 'update' && d.resource) {
+      // 乐观刷新更新项，避免 cache 同步窗口里看到老数据（如改 replicas 后还显示旧值）
+      markUpdated(d.resource);
+    }
+    // 1.5s 后静默刷新拉后端真实数据；若仍有 Terminating 资源会自动轮询直到消失
+    // 无具体 action 的事件（如详情弹框关闭）带 refresh 强制同步缓存
+    const needRefresh = !d || !d.action;
+    setTimeout(() => load({silent: true, refresh: needRefresh}), 1500);
+  ">
+  <div class="card-body p-5">
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div class="flex items-center gap-3">
+        <h3 class="text-xl font-bold flex items-center gap-2 text-base-content/80">
+          <i class="fas fa-{{block "resource_icon" .}}cube{{end}} text-violet-500"></i>
+          {{/* DecryptedText：hover 时标题打乱再逐字归位 */}}
+          <span data-vb-decrypt>{{block "resource_title" .}}Resources{{end}}</span>
+        </h3>
+        <span class="vb-counter px-3 py-1 rounded-full bg-violet-500 text-white text-sm font-bold" x-show="!loading" x-cloak x-text="filteredRows.length"></span>
+      </div>
+      <div class="flex items-center gap-2">
+        {{/* 自定义 namespace combobox：input + 下拉 panel 实现 contains 匹配，所有资源列表共享 */}}
+        <div x-show="namespaces.length > 0" x-cloak class="relative" @click.outside="nsOpen = false" style="width: 10rem;">
+          <button type="button"
+                  class="input input-bordered input-sm h-8 min-h-0 w-full text-xs focus:input-primary flex items-center justify-between gap-1 px-2"
+                  @click="nsOpen = !nsOpen; $nextTick(() => { if (nsOpen) $refs.nsSearchInput.focus() })">
+            <span class="truncate" :class="!nsFilter ? 'opacity-50' : ''" x-text="nsFilter || '全部命名空间'"></span>
+            <i class="fas fa-chevron-down text-[9px] opacity-50"></i>
+          </button>
+          <div x-show="nsOpen" x-cloak x-transition.opacity.duration.100ms
+               class="absolute z-50 mt-1 w-64 rounded-lg shadow-xl border border-base-300 bg-base-100 overflow-hidden"
+               style="left: 0;">
+            <div class="p-1.5 border-b border-base-300/50">
+              <input type="text" x-ref="nsSearchInput" x-model="nsSearch" placeholder="搜索命名空间（支持子串）"
+                     class="input input-bordered input-xs h-7 min-h-0 w-full text-[11px] focus:input-primary">
+            </div>
+            <div class="max-h-64 overflow-y-auto py-1">
+              <button type="button"
+                      class="w-full text-left px-3 py-1.5 text-[11px] hover:bg-base-200 transition-colors flex items-center gap-2"
+                      :class="!nsFilter ? 'bg-violet-500/10 text-violet-500 font-medium' : ''"
+                      @click="nsFilter = ''; nsOpen = false; nsSearch = ''; page = 1; load({silent: true})">
+                <i class="fas fa-check text-[9px]" :class="!nsFilter ? 'opacity-100' : 'opacity-0'"></i>
+                <span>全部命名空间</span>
+              </button>
+              <template x-for="ns in filteredNamespaces" :key="ns">
+                <button type="button"
+                        class="w-full text-left px-3 py-1.5 text-[11px] hover:bg-base-200 transition-colors flex items-center gap-2 font-mono"
+                        :class="nsFilter === ns ? 'bg-violet-500/10 text-violet-500 font-medium' : ''"
+                        @click="nsFilter = ns; nsOpen = false; nsSearch = ''; page = 1; load({silent: true})">
+                  <i class="fas fa-check text-[9px]" :class="nsFilter === ns ? 'opacity-100' : 'opacity-0'"></i>
+                  <span x-text="ns"></span>
+                </button>
+              </template>
+              <div x-show="filteredNamespaces.length === 0 && nsSearch" x-cloak class="text-center py-3 text-[11px] opacity-40">
+                没有匹配 "<span class="font-mono" x-text="nsSearch"></span>" 的命名空间
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="position: relative; display: inline-block;">
+          <input type="text" id="searchInput" placeholder="搜索名称（回车刷新）" class="input input-bordered input-sm h-8 min-h-0 w-48 text-xs focus:input-primary"
+            style="padding-right: 28px;"
+            x-model="search" @input="page = 1" @keydown.enter.prevent="load({silent: true})">
+          <button x-show="search" x-cloak @click="search = ''" type="button"
+            style="position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 9999px; display: flex; align-items: center; justify-content: center; opacity: 0.5; cursor: pointer; background: transparent; border: none; color: inherit;"
+            onmouseover="this.style.opacity='1'; this.style.background='rgba(127,127,127,0.15)'"
+            onmouseout="this.style.opacity='0.5'; this.style.background='transparent'"
+            title="清空">
+            <i class="fas fa-times" style="font-size: 10px;"></i>
+          </button>
+        </div>
+<!-- 静默刷新指示器已上移到页头面包屑栏最右侧（base.html），经 Alpine store 'ui.refreshing' 驱动 -->
+        {{block "extra_actions" .}}{{end}}
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div x-show="error" x-cloak class="alert alert-error text-sm border border-error/20 mb-4">
+      <i class="fas fa-exclamation-triangle text-sm"></i>
+      <span x-text="error"></span>
+    </div>
+
+    <!-- 集群连接错误横幅：cache 还在但最近一次 sync 失败 -->
+    <div x-show="!error && clusterError" x-cloak class="alert text-sm mb-4"
+         style="background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.3);">
+      <i class="fas fa-plug-circle-exclamation text-warning"></i>
+      <div class="flex-1">
+        <div class="font-semibold text-[12px] mb-0.5">集群连接异常，列表数据可能不是最新的</div>
+        <div class="text-[11px] opacity-80" x-text="clusterError && clusterError.message"></div>
+      </div>
+      <button @click="load({silent: true})" class="btn btn-ghost btn-xs h-7 min-h-0 text-[11px] gap-1">
+        <i class="fas fa-sync-alt text-[10px]"></i> 重试
+      </button>
+    </div>
+
+    <!-- 后端服务不可达：fetch 直接抛异常时进这里 -->
+    <div x-show="serviceDown" x-cloak class="alert alert-error text-sm mb-4">
+      <i class="fas fa-server"></i>
+      <div class="flex-1">
+        <div class="font-semibold text-[12px] mb-0.5">后端服务暂不可达</div>
+        <div class="text-[11px] opacity-80">无法连接到 Sailor 服务，请检查服务是否运行或刷新页面重试。</div>
+      </div>
+      <button @click="load({silent: true})" class="btn btn-ghost btn-xs h-7 min-h-0 text-[11px] gap-1">
+        <i class="fas fa-sync-alt text-[10px]"></i> 重试
+      </button>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="table table-sm fx-table" style="width: max-content; min-width: 100%;" id="resourceTable">
+        <thead>
+          <tr class="border-b border-base-300">
+            {{block "table_headers" .}}{{end}}
+          </tr>
+        </thead>
+        <tbody>
+          <!-- 骨架屏 -->
+          <template x-if="loading">
+            <template x-for="i in 6" :key="i">
+              <tr class="animate-pulse border-b border-base-300/50">
+                {{block "skeleton_cols" .}}
+                <td><div class="h-3 bg-base-300 rounded w-32"></div></td>
+                <td><div class="h-3 bg-base-300 rounded w-16"></div></td>
+                <td><div class="h-3 bg-base-300 rounded w-24"></div></td>
+                <td><div class="h-3 bg-base-300 rounded w-12"></div></td>
+                <td><div class="h-3 bg-base-300 rounded w-20"></div></td>
+                <td><div class="h-3 bg-base-300 rounded w-16"></div></td>
+                {{end}}
+              </tr>
+            </template>
+          </template>
+
+          <!-- 数据行 -->
+          <template x-if="!loading && !error">
+            <template x-for="r in pagedRows" :key="r.name + r.namespace">
+              {{block "table_row" .}}{{end}}
+            </template>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div x-show="!loading && totalPages > 1" x-cloak class="flex items-center justify-between mt-4 pt-4 border-t border-base-300/50">
+      <span class="text-[10px] opacity-40">共 <span x-text="filteredRows.length"></span> 条，每页 <span x-text="pageSize"></span> 条</span>
+      <div class="flex items-center gap-1">
+        <button @click="page = 1" :disabled="page === 1" class="btn btn-ghost btn-xs h-7 min-h-0 px-2" :class="page === 1 ? 'opacity-25 cursor-not-allowed' : ''">
+          <i class="fas fa-angle-double-left text-[10px]"></i>
+        </button>
+        <button @click="page--" :disabled="page === 1" class="btn btn-ghost btn-xs h-7 min-h-0 px-2" :class="page === 1 ? 'opacity-25 cursor-not-allowed' : ''">
+          <i class="fas fa-chevron-left text-[10px]"></i>
+        </button>
+        <span class="text-xs opacity-50 px-3">第 <span class="font-semibold text-primary" x-text="page"></span> / <span x-text="totalPages"></span> 页</span>
+        <button @click="page++" :disabled="page === totalPages" class="btn btn-ghost btn-xs h-7 min-h-0 px-2" :class="page === totalPages ? 'opacity-25 cursor-not-allowed' : ''">
+          <i class="fas fa-chevron-right text-[10px]"></i>
+        </button>
+        <button @click="page = totalPages" :disabled="page === totalPages" class="btn btn-ghost btn-xs h-7 min-h-0 px-2" :class="page === totalPages ? 'opacity-25 cursor-not-allowed' : ''">
+          <i class="fas fa-angle-double-right text-[10px]"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Empty -->
+    <div x-show="!loading && !error && !serviceDown && filteredRows.length === 0" x-cloak class="text-center py-16 opacity-60">
+      <template x-if="rows.length > 0 && search">
+        <div>
+          <i class="fas fa-search text-3xl mb-3 block text-primary/30"></i>
+          <p class="text-sm">没有匹配 "<span class="text-primary font-mono" x-text="search"></span>" 的结果</p>
+          <button class="btn btn-ghost btn-xs mt-3 h-7 min-h-0 text-[11px] gap-1" @click="search = ''">
+            <i class="fas fa-times text-[9px]"></i> 清空搜索
+          </button>
+        </div>
+      </template>
+      <template x-if="!(rows.length > 0 && search) && syncing && !clusterError">
+        <div>
+          <span class="loading loading-spinner loading-md text-primary mb-3"></span>
+          <p class="text-sm">首次加载中，正在从集群同步资源...</p>
+          <p class="text-[11px] opacity-50 mt-1">大集群约需 30 秒，请稍候</p>
+        </div>
+      </template>
+      <template x-if="!(rows.length > 0 && search) && clusterError">
+        <div>
+          <i class="fas fa-plug-circle-xmark text-3xl mb-3 block text-warning/60"></i>
+          <p class="text-sm">无法从集群拉取数据</p>
+          <p class="text-[11px] opacity-70 mt-1 max-w-md mx-auto" x-text="clusterError.message"></p>
+          <button class="btn btn-ghost btn-xs mt-3 h-7 min-h-0 text-[11px] gap-1" @click="load({silent: true})">
+            <i class="fas fa-sync-alt text-[9px]"></i> 重试
+          </button>
+        </div>
+      </template>
+      <template x-if="!(rows.length > 0 && search) && !syncing && !clusterError && optionalInstalled === false">
+        <div>
+          <i class="fas fa-puzzle-piece text-3xl mb-3 block text-primary/30"></i>
+          <p class="text-sm">未检测到 KEDA</p>
+          <p class="text-[11px] opacity-60 mt-1 max-w-md mx-auto">
+            该集群没有安装 KEDA（keda.sh CRD）。安装后在集群里创建 ScaledObject / ScaledJob 即可在此管理。
+          </p>
+          <a href="https://keda.sh/docs/latest/deploy/" target="_blank" rel="noopener"
+             class="btn btn-ghost btn-xs mt-3 h-7 min-h-0 text-[11px] gap-1 text-primary">
+            <i class="fas fa-book text-[9px]"></i> 部署文档
+          </a>
+        </div>
+      </template>
+      <template x-if="!(rows.length > 0 && search) && !syncing && !clusterError && optionalInstalled !== false">
+        <div>
+          <i class="fas fa-inbox text-3xl mb-3 block text-primary/30"></i>
+          <p class="text-sm">暂无数据</p>
+        </div>
+      </template>
+    </div>
+  </div>
+</div>
+
+{{template "resource_modals" .}}
+
+<script>
+function resourceList() {
+  const initialParams = new URLSearchParams(location.search);
+
+  return {
+    loading: true,         // 首次加载 - 显示骨架屏
+    refreshing: false,     // 后台静默刷新 - 不闪骨架屏，页头面包屑栏右侧显示"刷新中"
+    error: null,
+    serviceDown: false,    // fetch 抛异常（后端服务挂了 / 网络断了）
+    clusterError: null,    // 后端可达但 sync 失败：{message, resource_type, failed_at}
+    syncError: null,       // 兼容字段（未使用）
+    syncing: false,        // 后端 cache 还没填上，sync 进行中
+    optionalInstalled: null, // 可选 CRD（KEDA）安装状态：null=未知 true/false=已/未安装
+    rows: [],
+    namespaces: [],
+    nsFilter: initialParams.get('namespace') || '',
+    nsOpen: false,           // ns combobox 下拉 panel 是否展开
+    nsSearch: '',            // ns combobox 输入框内容（contains 匹配，比原生 select 强）
+    search: initialParams.get('search') || '',
+    page: parseInt(initialParams.get('page'), 10) || 1,
+    pageSize: 20,
+    _pollTimer: null,
+    _pollDeadline: 0,
+    _loadController: null,
+    // 乐观操作存档：让 load() 不会瞬间覆盖最近用户操作的状态
+    // key: "ns|name" -> {action: 'add'|'remove'|'terminate', resource?, until: timestamp}
+    _pendingOps: {},
+    PENDING_TTL: 30 * 1000,
+
+    init() {
+      this.$watch('search', () => { this.page = 1; this._syncUrl(); });
+      this.$watch('page', () => this._syncUrl());
+      this.$watch('nsFilter', () => this._syncUrl());
+      this.load();
+    },
+
+    _syncUrl() {
+      const p = new URLSearchParams(location.search);
+      this.nsFilter ? p.set('namespace', this.nsFilter) : p.delete('namespace');
+      this.search ? p.set('search', this.search) : p.delete('search');
+      (this.page && this.page !== 1) ? p.set('page', this.page) : p.delete('page');
+      const qs = p.toString();
+      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+    },
+
+    get filteredRows() {
+      if (!this.search) return this.rows;
+      const q = this.search.toLowerCase();
+      return this.rows.filter(r => (r.name || '').toLowerCase().includes(q));
+    },
+    get filteredNamespaces() {
+      if (!this.nsSearch) return this.namespaces;
+      const q = this.nsSearch.toLowerCase();
+      return this.namespaces.filter(ns => (ns || '').toLowerCase().includes(q));
+    },
+    get totalPages() {
+      return Math.ceil(this.filteredRows.length / this.pageSize) || 1;
+    },
+    get pagedRows() {
+      const start = (this.page - 1) * this.pageSize;
+      return this.filteredRows.slice(start, start + this.pageSize);
+    },
+
+    _key(name, namespace) {
+      return (namespace || '') + '|' + (name || '');
+    },
+
+    // Pod / Namespace 删除后立即标记为 Terminating，直到后端真返回 Terminating 状态
+    markTerminating(name, namespace) {
+      const k = this._key(name, namespace);
+      this._pendingOps[k] = {action: 'terminate', until: Date.now() + this.PENDING_TTL};
+      this.rows = this.rows.map(r => {
+        if (this._key(r.name, r.namespace) === k) {
+          return {...r, status_phase: 'Terminating', status: 'Terminating'};
+        }
+        return r;
+      });
+    },
+    // 其他资源删除后立即移除（_pendingOps 防止 load 拿到老 cache 时把它复活）
+    markRemoved(name, namespace) {
+      const k = this._key(name, namespace);
+      this._pendingOps[k] = {action: 'remove', until: Date.now() + this.PENDING_TTL};
+      this.rows = this.rows.filter(r => this._key(r.name, r.namespace) !== k);
+    },
+    // 资源被更新后立即用最新数据替换 rows 里的对应项（不依赖 cache 同步窗口）
+    markUpdated(resource) {
+      if (!resource || !resource.name) return;
+      const k = this._key(resource.name, resource.namespace);
+      this._pendingOps[k] = {action: 'update', resource, until: Date.now() + 8000};
+      const idx = this.rows.findIndex(r => this._key(r.name, r.namespace) === k);
+      if (idx >= 0) {
+        this.rows = [...this.rows.slice(0, idx), resource, ...this.rows.slice(idx + 1)];
+      } else {
+        this.rows = [resource, ...this.rows];
+      }
+    },
+    // 创建资源后立即插入到列表顶部（_pendingOps 防止 load 拿到老 cache 时把它清掉）
+    markAdded(resource) {
+      if (!resource || !resource.name) return;
+      const k = this._key(resource.name, resource.namespace);
+      this._pendingOps[k] = {action: 'add', resource, until: Date.now() + this.PENDING_TTL};
+      if (!this.rows.some(r => this._key(r.name, r.namespace) === k)) {
+        this.rows = [resource, ...this.rows];
+      }
+      // 如果当前搜索条件不会匹配新建项，自动清空搜索让它立即可见
+      if (this.search && !(resource.name || '').toLowerCase().includes(this.search.toLowerCase())) {
+        this.search = '';
+        if (typeof showToast === 'function') showToast('已清空搜索条件以显示新建项', 'info');
+      }
+      this.page = 1;
+    },
+
+    // 把后端返回的 items 与 _pendingOps 合并（remove/terminate/add/update 四类）
+    _mergePendingOps(items) {
+      const now = Date.now();
+      Object.keys(this._pendingOps).forEach(k => {
+        if (this._pendingOps[k].until < now) delete this._pendingOps[k];
+      });
+
+      const itemKey = r => this._key(r.name, r.namespace);
+
+      items = items.filter(r => {
+        const op = this._pendingOps[itemKey(r)];
+        return !(op && op.action === 'remove');
+      });
+      Object.keys(this._pendingOps).forEach(k => {
+        const op = this._pendingOps[k];
+        if (op.action !== 'remove') return;
+        if (!items.some(r => itemKey(r) === k)) delete this._pendingOps[k];
+      });
+
+      items = items.map(r => {
+        const op = this._pendingOps[itemKey(r)];
+        if (op && op.action === 'terminate') {
+          if (r.status_phase === 'Terminating' || r.status === 'Terminating') {
+            delete this._pendingOps[itemKey(r)];
+            return r;
+          }
+          return {...r, status_phase: 'Terminating', status: 'Terminating'};
+        }
+        return r;
+      });
+
+      Object.keys(this._pendingOps).forEach(k => {
+        const op = this._pendingOps[k];
+        if (op.action !== 'add') return;
+        const exists = items.some(r => itemKey(r) === k);
+        if (!exists) {
+          items = [op.resource, ...items];
+        } else {
+          delete this._pendingOps[k];
+        }
+      });
+
+      // update 处理：TTL 内强制用 op.resource 覆盖同 key 项（应对后端 cache 未刷新窗口）
+      items = items.map(r => {
+        const op = this._pendingOps[itemKey(r)];
+        if (op && op.action === 'update') return op.resource;
+        return r;
+      });
+
+      return items;
+    },
+
+    _hasTerminating() {
+      return this.rows.some(r => r.status_phase === 'Terminating' || r.status === 'Terminating');
+    },
+    // 检测工作负载是否不健康（ready < desired），让 YAML apply 改镜像后能快速看到副本数变绿
+    _hasUnhealthy() {
+      return this.rows.some(r => {
+        if (r.replicas !== undefined && r.ready_replicas !== undefined) {
+          return r.ready_replicas < r.replicas;
+        }
+        if (r.desired !== undefined && r.ready !== undefined) {
+          return r.ready < r.desired;
+        }
+        if (r.ready_str) {
+          const parts = r.ready_str.split('/');
+          return parts.length === 2 && parts[0] !== parts[1];
+        }
+        return false;
+      });
+    },
+    // Terminating: 前 30s 用 2.5s 间隔，之后 6s，最长 120s
+    // Unhealthy: 固定 5s 间隔，最长 60s
+    _startPolling() {
+      if (this._pollTimer) return;
+      const hasTerminating = this._hasTerminating();
+      const hasUnhealthy = this._hasUnhealthy();
+      if (!hasTerminating && !hasUnhealthy) return;
+
+      this._pollDeadline = Date.now() + (hasTerminating ? 120000 : 60000);
+      const denseUntil = Date.now() + 30000;
+      const tick = () => {
+        if (Date.now() > this._pollDeadline || (!this._hasTerminating() && !this._hasUnhealthy())) {
+          this._stopPolling();
+          return;
+        }
+        this.load({silent: true, refresh: true}).finally(() => {
+          const interval = this._hasTerminating()
+            ? (Date.now() < denseUntil ? 2500 : 6000)
+            : 5000;
+          this._pollTimer = setTimeout(tick, interval);
+        });
+      };
+      this._pollTimer = setTimeout(tick, this._hasTerminating() ? 2500 : 5000);
+    },
+    _stopPolling() {
+      if (this._pollTimer) clearTimeout(this._pollTimer);
+      this._pollTimer = null;
+    },
+
+    load(opts) {
+      const silent = !!(opts && opts.silent);
+      const refresh = !!(opts && opts.refresh);
+      if (silent) {
+        this.refreshing = true;
+        // 点亮页头（面包屑栏最右侧）的全局刷新指示
+        if (window.Alpine) Alpine.store('ui').refreshing = true;
+      }
+      else this.loading = true;
+      this.error = null;
+      this.serviceDown = false;
+      // 取消上一次未完成的请求，防止旧请求的响应覆盖新筛选条件的结果
+      if (this._loadController) this._loadController.abort();
+      this._loadController = new AbortController();
+      let apiUrl = '{{.Content.APIURL}}';
+      const params = new URLSearchParams();
+      if (this.nsFilter) params.set('namespace', this.nsFilter);
+      if (refresh) params.set('refresh', '1');
+      const qs = params.toString();
+      if (qs) apiUrl += '?' + qs;
+      return fetch(apiUrl, {signal: this._loadController.signal})
+        .then(r => {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(data => {
+          if (data.error) { this.error = data.error; return; }
+          this.clusterError = data.cluster_error || null;
+          this.syncing = !!data.syncing;
+          // 可选 CRD（KEDA）安装标记：只有列表 API 明确带该字段时才更新，
+          // 其它资源页的响应没有此字段，不能覆盖成 undefined
+          if (data.optional_installed !== undefined) this.optionalInstalled = data.optional_installed;
+          let items = data.resources || data.namespaces || [];
+          if (data.resources) items = data.resources;
+          this.rows = this._mergePendingOps(items);
+          if (!this.nsFilter) {
+            // 优先用后端返回的 ns 全集；否则才退化到从 rows 聚合
+            if (data.resources && Array.isArray(data.namespaces) && data.namespaces.length > 0) {
+              this.namespaces = [...data.namespaces].sort();
+            } else if (this.rows.length > 0) {
+              const nsSet = new Set(this.rows.map(r => r.namespace).filter(Boolean));
+              this.namespaces = [...nsSet].sort();
+            }
+          }
+          if (this.page > this.totalPages) this.page = this.totalPages;
+          if (this._hasTerminating() || this._hasUnhealthy()) this._startPolling();
+          else this._stopPolling();
+
+          // syncing 状态下自动 3s 后再拉一次
+          if (this.syncing && !this.clusterError) {
+            clearTimeout(this._syncRetryTimer);
+            this._syncRetryTimer = setTimeout(() => this.load({silent: true}), 3000);
+          }
+        })
+        .catch(e => {
+          if (e.name === 'AbortError') return;
+          this.serviceDown = true;
+          this.error = null;
+        })
+        .finally(() => {
+          this.loading = false;
+          this.refreshing = false;
+          if (window.Alpine) Alpine.store('ui').refreshing = false;
+        });
+    }
+  }
+}
+
+function filterTable(query) {
+  // Legacy fallback, now handled by Alpine.js search
+}
+
+function confirmRestart(url, name) {
+  window.dispatchEvent(new CustomEvent('open-restart-modal', {detail: {name: name, restartUrl: url}}));
+}
+</script>
+{{end}}

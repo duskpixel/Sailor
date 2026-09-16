@@ -1,0 +1,23 @@
+{
+  "name": "armada",
+  "version": "2.0.0",
+  "description": "Armada - 多集群 Kubernetes 管理桌面端",
+  "scripts": {
+    "build:css": "npx @tailwindcss/cli -i ./static/css/input.css -o ./frontend/dist/static/css/output.css --minify",
+    "watch:css": "npx @tailwindcss/cli -i ./static/css/input.css -o ./frontend/dist/static/css/output.css --watch",
+    "sync:static": "node scripts/sync-static.js",
+    "build:ui": "npm run sync:static && npm run build:css",
+    "install:app": "./scripts/install.sh",
+    "build:mac": "./scripts/build.sh",
+    "build:win": "powershell -ExecutionPolicy Bypass -File scripts/build.ps1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.2.2",
+    "daisyui": "^5.5.19",
+    "tailwindcss": "^4.2.2"
+  }
+}

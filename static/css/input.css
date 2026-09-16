@@ -1,0 +1,31 @@
+@import "tailwindcss";
+@source "../../internal/webui/templates/**/*.html";
+@plugin "daisyui";
+
+/* 定制亮色主题：暗色主题保持 daisyUI 默认，亮色单独调过一轮。
+   取向是"商业级控制台"：状态色整体加深一档 —— 它们大量以 text-* 形式
+   直接落在白底上（badge/图标/文字），daisyUI 默认亮色那套浅粉、浅绿、
+   浅琥珀在白底上既刺眼又读不清；加深后实底组件配近白 content，对比也过 AA。
+   base-200/300 带一点同族冷灰，让画布、卡片、发丝边拉开层次而非纯白一片。 */
+@plugin "daisyui/theme" {
+  name: "light";
+  color-scheme: light;
+  --color-base-100: oklch(100% 0 0);
+  --color-base-200: oklch(97.2% 0.003 286);
+  --color-base-300: oklch(92.6% 0.005 286);
+  --color-base-content: oklch(22.5% 0.012 285);
+  --color-primary: oklch(45% 0.24 277.023);
+  --color-primary-content: oklch(98.5% 0.005 275);
+  --color-secondary: oklch(58% 0.225 354.308);
+  --color-secondary-content: oklch(97% 0.01 350);
+  --color-accent: oklch(58% 0.12 195);
+  --color-accent-content: oklch(97% 0.01 195);
+  --color-info: oklch(62% 0.145 240);
+  --color-info-content: oklch(97% 0.01 240);
+  --color-success: oklch(60% 0.135 162);
+  --color-success-content: oklch(98% 0.01 160);
+  --color-warning: oklch(72% 0.155 62);
+  --color-warning-content: oklch(27% 0.077 45.904);
+  --color-error: oklch(57.5% 0.205 27);
+  --color-error-content: oklch(96% 0.012 25);
+}

@@ -1,0 +1,77 @@
+{{define "title"}}Pods - {{.Content.Cluster.DisplayName}} - Sailor{{end}}
+{{define "page_title"}}Pods{{end}}
+{{define "breadcrumb"}}<li><a href="/clusters/{{.Content.Cluster.ID}}/">{{.Content.Cluster.DisplayName}}</a></li><li>Pods</li>{{end}}
+{{define "resource_icon"}}cubes{{end}}
+{{define "resource_title"}}Pods{{end}}
+
+{{define "extra_actions"}}
+<button class="btn btn-primary btn-sm gap-1.5 h-8 min-h-0 text-xs" onclick="openYamlCreate('pod', '{{.Content.ApplyURL}}')">
+  <i class="fas fa-plus text-[10px]"></i> 新建
+</button>
+{{end}}
+
+{{define "table_headers"}}
+<th class="font-semibold text-xs">名称</th>
+<th class="font-semibold text-xs">命名空间</th>
+<th class="font-semibold text-xs">状态</th>
+<th class="font-semibold text-xs">就绪</th>
+<th class="font-semibold text-xs">重启</th>
+<th class="font-semibold text-xs">Age</th>
+<th class="font-semibold text-xs">节点</th>
+<th class="font-semibold text-xs">IP</th>
+<th class="font-semibold text-xs">操作</th>
+{{end}}
+
+{{define "table_row"}}
+<tr class="hover:bg-base-200/50 border-b border-base-300/50">
+  <td class="font-mono text-xs font-medium" x-text="r.name"></td>
+  <td class="whitespace-nowrap"><span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[11px] font-medium text-violet-400"><span class="w-1.5 h-1.5 rounded-full bg-violet-400"></span><span x-text="r.namespace"></span></span></td>
+  <td>
+    <template x-if="r.status_phase == 'Terminating'">
+      <span class="badge badge-xs gap-1 bg-orange-500/15 border border-orange-500/30 text-orange-400">
+        <i class="fas fa-spinner fa-spin text-[8px]"></i>
+        <span x-text="r.status_phase"></span>
+      </span>
+    </template>
+    <template x-if="r.status_phase != 'Terminating'">
+      <div class="flex flex-col gap-0.5">
+        <span class="badge badge-xs" :class="r.status_phase == 'Running' ? 'badge-success' : r.status_phase == 'Pending' ? 'badge-warning' : r.status_phase == 'Succeeded' ? 'badge-info' : 'badge-error'" x-text="r.status_phase"></span>
+        {{/* 容器层卡点：reason 用红色 badge 突出展示，鼠标悬停看完整 message */}}
+        <template x-if="r.status_reason">
+          <span class="badge badge-xs gap-1 bg-rose-500/15 border border-rose-500/30 text-rose-400 font-mono text-[9px] cursor-help"
+                :title="r.status_message || r.status_reason">
+            <i class="fas fa-exclamation-circle text-[8px]"></i>
+            <span x-text="r.status_reason"></span>
+          </span>
+        </template>
+      </div>
+    </template>
+  </td>
+  <td class="font-medium text-xs" x-text="r.ready_str"></td>
+  <td class="text-center text-xs" x-text="r.restarts"></td>
+  <td class="font-medium text-xs text-primary" x-text="r.age"></td>
+  <td class="text-xs opacity-70" x-text="r.node"></td>
+  <td class="text-xs opacity-70 font-mono" x-text="r.ip"></td>
+  <td>
+    <div class="row-actions">
+      {{/* Pod 由上层 controller 管理，K8s 不允许直接改 spec 大部分字段；canEdit 强制 false 进只读 */}}
+      <button type="button" class="row-action" title="YAML" @click="openYaml('Pod: ' + r.name, '/resources/{{.Content.Cluster.ID}}/yaml/pod/' + r.namespace + '/' + r.name + '/', false)">
+        <i class="fas fa-file-code"></i>
+      </button>
+      <button type="button" class="row-action" title="日志" @click="$dispatch('open-pod-logs', {namespace: r.namespace, podName: r.name, logsUrl: '/resources/{{.Content.Cluster.ID}}/pods/' + r.namespace + '/' + r.name + '/logs/'})">
+        <i class="fas fa-file-lines"></i>
+      </button>
+      {{/* 终端要进 shell：等价于对该 Pod 完全控制。只有 Running 的 Pod 能进。 */}}
+      <button type="button" class="row-action" title="终端" :disabled="r.status_phase != 'Running'"
+              :class="r.status_phase != 'Running' ? 'opacity-30 cursor-not-allowed' : ''"
+              @click="r.status_phase == 'Running' && $dispatch('open-pod-exec', {namespace: r.namespace, podName: r.name, execBase: '/resources/{{.Content.Cluster.ID}}/pods/' + r.namespace + '/' + r.name + '/exec/'})">
+        <i class="fas fa-terminal"></i>
+      </button>
+      <span class="row-action-sep"></span>
+      <button type="button" class="row-action is-danger" title="删除" @click="$dispatch('open-delete-modal', {type: 'Pod', name: r.name, namespace: r.namespace, deleteUrl: '/resources/{{.Content.Cluster.ID}}/delete/pod/' + r.namespace + '/' + r.name + '/'})">
+        <i class="fas fa-trash-alt"></i>
+      </button>
+    </div>
+  </td>
+</tr>
+{{end}}

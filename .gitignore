@@ -1,0 +1,33 @@
+# ---- Node / Tailwind ----
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---- Wails build output ----
+build/bin/
+
+# ---- Local secrets & data ----
+.env
+.env.*
+*.pem
+*.key
+kubeconfig
+*.kubeconfig
+db.sqlite3
+*.db
+
+# ---- Go ----
+*.test
+
+# ---- IDE / Editor ----
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# ---- Go build artifacts ----
+preview
+sailor-preview

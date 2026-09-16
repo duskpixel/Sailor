@@ -1,0 +1,77 @@
+{{define "title"}}CronJobs - {{.Content.Cluster.DisplayName}} - Sailor{{end}}
+{{define "page_title"}}CronJobs{{end}}
+{{define "breadcrumb"}}<li><a href="/clusters/{{.Content.Cluster.ID}}/">{{.Content.Cluster.DisplayName}}</a></li><li>CronJobs</li>{{end}}
+{{define "resource_icon"}}clock-rotate-left{{end}}
+{{define "resource_title"}}CronJobs{{end}}
+
+{{define "extra_actions"}}
+<button class="btn btn-primary btn-sm gap-1.5 h-8 min-h-0 text-xs" onclick="openYamlCreate('cronjob', '{{.Content.ApplyURL}}')">
+  <i class="fas fa-plus text-[10px]"></i> 新建
+</button>
+<script>
+/* CronJob 专属操作：挂起/恢复（spec.suspend merge patch）与立即触发
+   （后端拷贝 jobTemplate 创建一次性 Job）。成功后借 resource-updated
+   事件触发列表静默刷新；suspend 返回更新后的资源做乐观更新。 */
+function cronjobAction(action, url, name) {
+  const body = action === 'suspend' ? '{"suspend":true}' : action === 'resume' ? '{"suspend":false}' : '{}';
+  fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body})
+    .then(r => r.json())
+    .then(d => {
+      if (d.success) {
+        const msg = action === 'trigger' ? (d.message || '已触发一次') : (action === 'suspend' ? '已挂起' : '已恢复调度');
+        showToast(msg, 'success');
+        window.dispatchEvent(new CustomEvent('resource-updated', {detail: d.resource ? {action: 'update', resource: d.resource} : {}}));
+      } else {
+        showToast(d.error || '操作失败', 'error');
+      }
+    })
+    .catch(e => showToast('请求失败: ' + e.message, 'error'));
+}
+</script>
+{{end}}
+
+{{define "table_headers"}}
+<th class="font-semibold text-xs">名称</th>
+<th class="font-semibold text-xs">命名空间</th>
+<th class="font-semibold text-xs">调度</th>
+<th class="font-semibold text-xs">状态</th>
+<th class="font-semibold text-xs">活跃</th>
+<th class="font-semibold text-xs">上次调度</th>
+<th class="font-semibold text-xs">镜像</th>
+<th class="font-semibold text-xs">Age</th>
+<th class="font-semibold text-xs">操作</th>
+{{end}}
+
+{{define "table_row"}}
+<tr class="hover:bg-base-200/50 border-b border-base-300/50">
+  <td class="font-mono text-xs font-medium" x-text="r.name"></td>
+  <td class="whitespace-nowrap"><span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[11px] font-medium text-violet-400"><span class="w-1.5 h-1.5 rounded-full bg-violet-400"></span><span x-text="r.namespace"></span></span></td>
+  <td><span class="font-mono text-xs px-2 py-0.5 rounded-md bg-primary/10 text-primary" x-text="r.schedule"></span></td>
+  <td>
+    <span class="badge badge-xs" :class="r.suspend ? 'badge-warning' : 'badge-success'" x-text="r.suspend ? '已挂起' : '启用中'"></span>
+  </td>
+  <td>
+    <span class="font-medium text-xs" :class="r.active > 0 ? 'text-info' : 'opacity-50'" x-text="r.active"></span>
+  </td>
+  <td class="font-medium text-xs text-primary" x-text="r.last_schedule"></td>
+  <td class="text-xs opacity-70 max-w-48 truncate" :title="r.image" x-text="r.image"></td>
+  <td class="font-medium text-xs text-primary" x-text="r.age"></td>
+  <td>
+    <div class="row-actions">
+      <button type="button" class="row-action" title="立即触发" @click="cronjobAction('trigger', '/resources/{{.Content.Cluster.ID}}/cronjobs/' + r.namespace + '/' + r.name + '/trigger/', r.name)">
+        <i class="fas fa-play"></i>
+      </button>
+      <button type="button" class="row-action" :title="r.suspend ? '恢复调度' : '挂起'" @click="cronjobAction(r.suspend ? 'resume' : 'suspend', '/resources/{{.Content.Cluster.ID}}/cronjobs/' + r.namespace + '/' + r.name + '/suspend/', r.name)">
+        <i class="fas" :class="r.suspend ? 'fa-circle-play' : 'fa-circle-pause'"></i>
+      </button>
+      <button type="button" class="row-action" title="YAML" @click="openYaml('CronJob: ' + r.name, '/resources/{{.Content.Cluster.ID}}/yaml/cronjob/' + r.namespace + '/' + r.name + '/', true)">
+        <i class="fas fa-file-code"></i>
+      </button>
+      <span class="row-action-sep"></span>
+      <button type="button" class="row-action is-danger" title="删除" @click="$dispatch('open-delete-modal', {type: 'CronJob', name: r.name, namespace: r.namespace, deleteUrl: '/resources/{{.Content.Cluster.ID}}/delete/cronjob/' + r.namespace + '/' + r.name + '/'})">
+        <i class="fas fa-trash-alt"></i>
+      </button>
+    </div>
+  </td>
+</tr>
+{{end}}

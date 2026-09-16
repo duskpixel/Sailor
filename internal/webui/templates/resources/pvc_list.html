@@ -1,0 +1,47 @@
+{{define "title"}}PVCs - {{.Content.Cluster.DisplayName}} - Sailor{{end}}
+{{define "page_title"}}PersistentVolumeClaims{{end}}
+{{define "breadcrumb"}}<li><a href="/clusters/{{.Content.Cluster.ID}}/">{{.Content.Cluster.DisplayName}}</a></li><li>PVCs</li>{{end}}
+{{define "resource_icon"}}hdd{{end}}
+{{define "resource_title"}}PersistentVolumeClaims{{end}}
+
+{{define "extra_actions"}}
+<button class="btn btn-primary btn-sm gap-1.5 h-8 min-h-0 text-xs" onclick="openYamlCreate('pvc', '{{.Content.ApplyURL}}')">
+  <i class="fas fa-plus text-[10px]"></i> 新建
+</button>
+{{end}}
+
+{{define "table_headers"}}
+<th class="font-semibold text-xs">名称</th>
+<th class="font-semibold text-xs">命名空间</th>
+<th class="font-semibold text-xs">状态</th>
+<th class="font-semibold text-xs">容量</th>
+<th class="font-semibold text-xs">访问模式</th>
+<th class="font-semibold text-xs">存储类</th>
+<th class="font-semibold text-xs">创建时间</th>
+<th class="font-semibold text-xs">操作</th>
+{{end}}
+
+{{define "table_row"}}
+<tr class="hover:bg-base-200/50 border-b border-base-300/50">
+  <td class="font-mono text-xs font-medium" x-text="r.name"></td>
+  <td class="whitespace-nowrap"><span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[11px] font-medium text-violet-400"><span class="w-1.5 h-1.5 rounded-full bg-violet-400"></span><span x-text="r.namespace"></span></span></td>
+  <td>
+    <span class="badge badge-xs" :class="r.status_phase == 'Bound' ? 'badge-success' : r.status_phase == 'Pending' ? 'badge-warning' : 'badge-error'" x-text="r.status_phase"></span>
+  </td>
+  <td class="font-medium text-xs" x-text="r.storage"></td>
+  <td class="text-xs opacity-70" x-text="r.access_modes"></td>
+  <td><span class="badge badge-xs badge-ghost" x-text="r.storage_class"></span></td>
+  <td class="text-xs opacity-70" x-text="r.created"></td>
+  <td>
+    <div class="row-actions">
+      <button type="button" class="row-action" title="YAML" @click="openYaml('PVC: ' + r.name, '/resources/{{.Content.Cluster.ID}}/yaml/persistentvolumeclaim/' + r.namespace + '/' + r.name + '/', true)">
+        <i class="fas fa-file-code"></i>
+      </button>
+      <span class="row-action-sep"></span>
+      <button type="button" class="row-action is-danger" title="删除" @click="$dispatch('open-delete-modal', {type: 'PVC', name: r.name, namespace: r.namespace, deleteUrl: '/resources/{{.Content.Cluster.ID}}/delete/persistentvolumeclaim/' + r.namespace + '/' + r.name + '/'})">
+        <i class="fas fa-trash-alt"></i>
+      </button>
+    </div>
+  </td>
+</tr>
+{{end}}

@@ -1,0 +1,56 @@
+{{define "title"}}Deployments - {{.Content.Cluster.DisplayName}} - Sailor{{end}}
+{{define "page_title"}}Deployments{{end}}
+{{define "breadcrumb"}}<li><a href="/clusters/{{.Content.Cluster.ID}}/">{{.Content.Cluster.DisplayName}}</a></li><li>Deployments</li>{{end}}
+{{define "resource_icon"}}rocket{{end}}
+{{define "resource_title"}}Deployments{{end}}
+
+{{define "extra_actions"}}
+<button class="btn btn-primary btn-sm gap-1.5 h-8 min-h-0 text-xs" onclick="openYamlCreate('deployment', '{{.Content.ApplyURL}}')">
+  <i class="fas fa-plus text-[10px]"></i> 新建
+</button>
+{{end}}
+
+{{define "table_headers"}}
+<th class="font-semibold text-xs">名称</th>
+<th class="font-semibold text-xs">命名空间</th>
+<th class="font-semibold text-xs">镜像</th>
+<th class="font-semibold text-xs">副本</th>
+<th class="font-semibold text-xs">Age</th>
+<th class="font-semibold text-xs">操作</th>
+{{end}}
+
+{{define "table_row"}}
+<tr class="hover:bg-base-200/50 border-b border-base-300/50">
+  <td class="font-mono text-xs font-medium" x-text="r.name"></td>
+  <td class="whitespace-nowrap"><span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[11px] font-medium text-violet-400"><span class="w-1.5 h-1.5 rounded-full bg-violet-400"></span><span x-text="r.namespace"></span></span></td>
+  <td class="text-xs opacity-70 max-w-56 truncate" :title="r.image" x-text="r.image"></td>
+  <td>
+    <span class="font-medium text-xs" :class="r.ready_replicas == r.replicas ? 'text-success' : r.ready_replicas == 0 ? 'text-error' : 'text-warning'" x-text="r.ready_replicas + '/' + r.replicas"></span>
+  </td>
+  <td class="font-medium text-xs text-primary" x-text="r.age"></td>
+  <td>
+    <div class="row-actions">
+      <button type="button" class="row-action" title="详情" @click="$dispatch('open-deployment-describe', {pk: {{.Content.Cluster.ID}}, namespace: r.namespace, name: r.name})">
+        <i class="fas fa-info-circle"></i>
+      </button>
+      <button type="button" class="row-action" title="YAML" @click="openYaml('Deployment: ' + r.name, '/resources/{{.Content.Cluster.ID}}/yaml/deployment/' + r.namespace + '/' + r.name + '/', true)">
+        <i class="fas fa-file-code"></i>
+      </button>
+      <span class="row-action-sep"></span>
+      <button type="button" class="row-action" title="扩缩容" @click="$dispatch('open-scale-modal', {name: r.name, current: r.replicas, scaleUrl: '/resources/{{.Content.Cluster.ID}}/deployments/' + r.namespace + '/' + r.name + '/scale/'})">
+        <i class="fas fa-expand-arrows-alt"></i>
+      </button>
+      <button type="button" class="row-action" title="重启" @click="confirmRestart('/resources/{{.Content.Cluster.ID}}/deployments/' + r.namespace + '/' + r.name + '/restart/', r.name)">
+        <i class="fas fa-redo"></i>
+      </button>
+      <button type="button" class="row-action is-warn" title="回滚" @click="$dispatch('open-deployment-rollback', {pk: {{.Content.Cluster.ID}}, namespace: r.namespace, name: r.name})">
+        <i class="fas fa-undo"></i>
+      </button>
+      <span class="row-action-sep"></span>
+      <button type="button" class="row-action is-danger" title="删除" @click="$dispatch('open-delete-modal', {type: 'Deployment', name: r.name, namespace: r.namespace, deleteUrl: '/resources/{{.Content.Cluster.ID}}/delete/deployment/' + r.namespace + '/' + r.name + '/'})">
+        <i class="fas fa-trash-alt"></i>
+      </button>
+    </div>
+  </td>
+</tr>
+{{end}}

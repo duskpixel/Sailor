@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{block "title" .}}Sailor{{end}}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/css/output.css">
+  <link rel="stylesheet" href="/static/css/all.min.css">
+  <link rel="stylesheet" href="/static/css/sailor-fx.css">
+  <link rel="stylesheet" href="/static/css/vue-bits.css">
+  <link rel="stylesheet" href="/static/css/xterm.css">
+  <style>
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: color-mix(in oklab, var(--color-base-content) 15%, transparent); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: color-mix(in oklab, var(--color-base-content) 25%, transparent); }
+
+    /* Sidebar */
+    .sidebar { width: 15rem; transition: width 0.2s ease; }
+    .sidebar-collapsed { width: 4rem !important; }
+    .sidebar-collapsed .sidebar-label,
+    .sidebar-collapsed .sidebar-logo-text,
+    .sidebar-collapsed .sidebar-section-title,
+    .sidebar-collapsed .sidebar-footer-text { display: none; }
+    .sidebar-collapsed .sidebar-nav-item { justify-content: center; padding-left: 0; padding-right: 0; }
+    .sidebar-collapsed .sidebar-nav-icon { margin-right: 0; }
+
+    /* Main content */
+    .main-content { transition: margin-left 0.2s ease; }
+
+    /* Card hover - subtle（黑阴影两主题通用：暗色下自然隐形，亮色下也不压卡片） */
+    .card { transition: box-shadow 0.15s ease, transform 0.15s ease; }
+    .card:hover { box-shadow: 0 4px 12px oklch(0 0 0 / 0.1); }
+
+    /* Stat card orbs */
+    .stat-card { position: relative; overflow: hidden; }
+    .stat-card::before {
+      content: ''; position: absolute; top: -20px; right: -20px;
+      width: 80px; height: 80px; border-radius: 50%; opacity: 0.06;
+    }
+    .stat-card-primary::before { background: var(--color-primary); }
+    .stat-card-success::before { background: var(--color-success); }
+    .stat-card-error::before { background: var(--color-error); }
+    .stat-card-info::before { background: var(--color-info); }
+    .stat-card-violet::before { background: #8b5cf6; }
+    .stat-card-amber::before { background: #f59e0b; }
+    .stat-card-emerald::before { background: #10b981; }
+    .stat-card-blue::before { background: #3b82f6; }
+
+    /* Sidebar active */
+    .sidebar-nav-item.active {
+      background: color-mix(in oklab, var(--color-primary) 12%, transparent) !important;
+      color: var(--color-primary);
+    }
+    .sidebar-nav-item.active .sidebar-nav-icon { color: var(--color-primary); }
+
+    /* Sidebar hover */
+    .sidebar-nav-item:not(.active):hover {
+      background: color-mix(in oklab, var(--color-base-content) 5%, transparent);
+    }
+
+    /* Table */
+    .table tbody tr { transition: background-color 0.1s ease; }
+
+    /* 行内操作图标按钮：替代一排带文字的按钮，紧凑且现代。
+       用原生 title 做 tooltip，避免 DaisyUI CSS tooltip 在 overflow-x-auto 表格里被裁切。 */
+    .row-actions { display: inline-flex; align-items: center; gap: 2px; }
+    .row-action {
+      width: 28px; height: 28px; flex-shrink: 0;
+      display: inline-flex; align-items: center; justify-content: center;
+      border-radius: 7px; font-size: 12px; line-height: 1;
+      color: color-mix(in oklab, var(--color-base-content) 50%, transparent); background: transparent; border: none;
+      cursor: pointer; transition: background-color 0.12s ease, color 0.12s ease;
+    }
+    .row-action:hover { background: color-mix(in oklab, var(--color-base-content) 9%, transparent); color: color-mix(in oklab, var(--color-base-content) 90%, transparent); }
+    .row-action:focus-visible { outline: 2px solid color-mix(in oklab, var(--color-primary) 50%, transparent); outline-offset: 1px; }
+    .row-action.is-warn:hover { background: color-mix(in oklab, var(--color-warning) 14%, transparent); color: var(--color-warning); }
+    .row-action.is-danger:hover { background: color-mix(in oklab, var(--color-error) 14%, transparent); color: var(--color-error); }
+    .row-action-sep { width: 1px; height: 15px; flex-shrink: 0; background: color-mix(in oklab, var(--color-base-content) 12%, transparent); margin: 0 3px; }
+
+    /* Page transition */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .page-content { animation: fadeIn 0.2s ease-out; }
+
+    /* Status pulse */
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .status-pulse { animation: pulse-dot 2s ease-in-out infinite; }
+
+    /* Gradient text */
+    /* 顶栏（导航）与侧栏是同一块"融合表面"：提高不透明度，
+       避免玻璃透出 fx-bg 彩色光斑后出现导航栏偏蓝、侧栏偏白的色带差 */
+    #topNav, .sidebar {
+      background: color-mix(in oklab, var(--color-base-100) 90%, transparent);
+    }
+
+    .text-gradient {
+      background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+  </style>
+  {{block "extra_head" .}}{{end}}
+</head>
+<body class="min-h-screen text-base-content" x-data="{ sidebarOpen: localStorage.getItem('sidebarOpen') !== 'false' }" x-init="$watch('sidebarOpen', val => localStorage.setItem('sidebarOpen', val))">
+
+  {{/* 背景动效层：光斑由 GSAP 驱动漂移，网格是静态底纹。 */}}
+  <div class="fx-bg" aria-hidden="true">
+    <div class="fx-grid-layer"></div>
+  </div>
+
+  <!-- Top Navbar -->
+  {{/* 统一式布局（红绿灯融入界面）：侧边栏顶到窗口顶，红绿灯落在侧栏顶部；
+       本导航栏从侧栏右缘开始（随侧栏开合平移），两端 flex-1 夹住集群选择器保持居中。
+       交互元素必须标 no-drag，否则点击会被拖拽手势吞掉。 */}}
+  <nav id="topNav" class="fx-glass fixed top-0 right-0 z-50 h-12 border-b border-base-300 flex items-center gap-3 px-4 transition-all duration-200"
+       :class="sidebarOpen ? 'left-60' : 'left-16'"
+       style="--wails-draggable: drag;">
+    <div class="flex-1"></div>
+
+    <!-- Center: Cluster Selector -->
+    <div class="flex items-center" style="--wails-draggable: no-drag">
+      <div class="relative" x-data="{ open: false }" @click.away="open = false">
+        <button @click="open = !open" class="btn btn-sm btn-ghost gap-2 rounded-lg font-normal text-sm h-8 min-h-0 px-3 bg-base-200/40 border border-transparent hover:bg-base-200/70 transition-colors">
+          <span class="w-1.5 h-1.5 rounded-full {{if and .ActiveCluster (eq .ActiveCluster.Status "online")}}bg-success{{else if and .ActiveCluster (eq .ActiveCluster.Status "offline")}}bg-error{{else if .ActiveCluster}}bg-warning{{else}}bg-base-content/30{{end}}"></span>
+          <span>{{if .ActiveCluster}}{{.ActiveCluster.DisplayName}}{{else}}选择集群{{end}}</span>
+          <i class="fas fa-chevron-down text-[10px] opacity-50 transition-transform duration-150" :class="open && 'rotate-180'"></i>
+        </button>
+        <ul x-show="open" x-transition:enter="transition ease-out duration-100" x-transition:enter-start="opacity-0 scale-95" x-transition:enter-end="opacity-100 scale-100" x-transition:leave="transition ease-in duration-75" x-transition:leave-start="opacity-100 scale-100" x-transition:leave-end="opacity-0 scale-95" class="absolute left-1/2 -translate-x-1/2 mt-2 bg-base-100 rounded-lg z-10 w-56 py-1 shadow-xl border border-base-300">
+          {{if .AllClusters}}
+          {{range .AllClusters}}
+          <li>
+            <a href="/clusters/{{.ID}}/select/?next={{$.CurrentPath}}" class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-base-200 transition-colors {{if $.ActiveCluster}}{{if eq $.ActiveCluster.ID .ID}}text-primary bg-primary/5{{end}}{{end}}">
+              <span class="w-1.5 h-1.5 rounded-full flex-shrink-0 {{if eq .Status "online"}}bg-success{{else if eq .Status "offline"}}bg-error{{else}}bg-warning{{end}}"></span>
+              {{.DisplayName}}
+              {{if $.ActiveCluster}}{{if eq $.ActiveCluster.ID .ID}}
+              <i class="fas fa-check text-[10px] text-primary ml-auto"></i>
+              {{end}}{{end}}
+            </a>
+          </li>
+          {{end}}
+          <li class="border-t border-base-300 mt-1 pt-1">
+            <a href="/clusters/add/" class="flex items-center gap-2 px-3 py-2 text-sm text-primary hover:bg-base-200 transition-colors">
+              <i class="fas fa-plus text-[10px]"></i> 导入新集群
+            </a>
+          </li>
+          {{else}}
+          <li class="px-3 py-2 text-xs opacity-50">暂无集群</li>
+          <li>
+            <a href="/clusters/add/" class="flex items-center gap-2 px-3 py-2 text-sm text-primary hover:bg-base-200 transition-colors">
+              <i class="fas fa-plus text-[10px]"></i> 导入 Kubeconfig
+            </a>
+          </li>
+          {{end}}
+        </ul>
+      </div>
+    </div>
+
+    <!-- Right: Theme -->
+    <div class="flex-1 flex items-center justify-end gap-1" style="--wails-draggable: no-drag">
+      <label class="swap swap-rotate btn btn-ghost btn-sm btn-square">
+        <input type="checkbox" id="themeToggle" class="theme-controller" value="light" />
+        <i class="fas fa-sun swap-on text-sm text-amber-500"></i>
+        <i class="fas fa-moon swap-off text-sm text-indigo-300"></i>
+      </label>
+    </div>
+  </nav>
+
+  <!-- Sidebar -->
+  {{/* 侧栏竖线已去除，靠表面色差区分内容区。
+       顶部布局：展开 = [红绿灯让位][折叠按钮][logo + 标题]；
+       收起 = 标题隐藏，折叠按钮 + logo 图标竖排，logo 显示在仪表盘图标上方。 */}}
+  <aside
+    class="sidebar fx-glass fixed top-0 left-0 bottom-0 z-40 overflow-hidden flex flex-col"
+    :class="sidebarOpen ? '' : 'sidebar-collapsed'"
+  >
+    <!-- 展开：顶部行只作红绿灯让位与拖拽区（折叠按钮悬浮在侧栏右边框上） -->
+    <div x-show="sidebarOpen" class="h-12 flex items-center pl-[76px] pr-3 flex-shrink-0"
+         style="--wails-draggable: drag;"></div>
+
+    <!-- 收起：logo 图标显示在仪表盘图标上方（标题隐藏） -->
+    <div x-show="!sidebarOpen" class="flex flex-col items-center pt-12 pb-3 flex-shrink-0"
+         style="--wails-draggable: drag;">
+      <a href="/" class="no-underline" title="Sailor" style="--wails-draggable: no-drag">
+        <div class="fx-logo w-7 h-7 rounded-lg flex items-center justify-center">
+          <i class="fas fa-dharmachakra text-white text-xs"></i>
+        </div>
+      </a>
+    </div>
+
+    <nav class="flex-1 py-2 px-2 overflow-y-auto overflow-x-hidden">
+      <!-- Dashboard -->
+      <a href="/" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .PageID "dashboard"}}active{{end}}">
+        <i class="sidebar-nav-icon fas fa-th-large text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">仪表盘</span>
+      </a>
+
+      <!-- Cluster Management -->
+      <div class="mt-4 mb-1 px-3">
+        <span class="sidebar-section-title text-[10px] font-semibold uppercase tracking-widest opacity-30">集群</span>
+      </div>
+      <a href="/clusters/" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-server text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">集群列表</span>
+      </a>
+      <a href="{{if .ActiveCluster}}/clusters/{{.ActiveCluster.ID}}/nodes/manage/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-cube text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">节点管理</span>
+      </a>
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/namespaces/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-layer-group text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">命名空间</span>
+      </a>
+
+      <!-- Workloads -->
+      <div class="mt-4 mb-1 px-3">
+        <span class="sidebar-section-title text-[10px] font-semibold uppercase tracking-widest opacity-30">工作负载</span>
+      </div>
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/deployments/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-rocket text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">Deployments</span>
+      </a>
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/statefulsets/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-database text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">StatefulSets</span>
+      </a>
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/daemonsets/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-clone text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">DaemonSets</span>
+      </a>
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/jobs/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-briefcase text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">Jobs</span>
+      </a>
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/cronjobs/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-clock-rotate-left text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">CronJobs</span>
+      </a>
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/pods/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-cubes text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">Pods</span>
+      </a>
+
+      <!-- Autoscaling：KEDA 入口仅在同步器探测到集群已安装 KEDA 时显示 -->
+      <div class="mt-4 mb-1 px-3">
+        <span class="sidebar-section-title text-[10px] font-semibold uppercase tracking-widest opacity-30">弹性伸缩</span>
+      </div>
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/hpas/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-chart-line text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">HPA</span>
+      </a>
+      {{if .KEDAInstalled}}
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/scaledobjects/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-arrows-left-right-to-line text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">KEDA ScaledObjects</span>
+      </a>
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/scaledjobs/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-arrows-up-to-line text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">KEDA ScaledJobs</span>
+      </a>
+      {{end}}
+
+      <!-- Network & Storage -->
+      <div class="mt-4 mb-1 px-3">
+        <span class="sidebar-section-title text-[10px] font-semibold uppercase tracking-widest opacity-30">网络与存储</span>
+      </div>
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/services/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-network-wired text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">Services</span>
+      </a>
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/ingresses/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-globe text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">Ingress</span>
+      </a>
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/pvcs/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-hdd text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">PV / PVC</span>
+      </a>
+
+      <!-- Config -->
+      <div class="mt-4 mb-1 px-3">
+        <span class="sidebar-section-title text-[10px] font-semibold uppercase tracking-widest opacity-30">配置</span>
+      </div>
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/configmaps/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-file-code text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">ConfigMaps</span>
+      </a>
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/secrets/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+        <i class="sidebar-nav-icon fas fa-key text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">Secrets</span>
+      </a>
+    </nav>
+
+    <!-- Sidebar Footer：仅展开时显示（logo/标题 + 版本号）；收起时整块隐藏 -->
+    <div x-show="sidebarOpen" class="p-3 border-t border-base-300 flex flex-col items-center gap-1.5 flex-shrink-0" style="--wails-draggable: drag;">
+      <a href="/" class="flex items-center gap-2 no-underline" style="--wails-draggable: no-drag">
+        <div class="fx-logo w-7 h-7 rounded-lg flex items-center justify-center">
+          <i class="fas fa-dharmachakra text-white text-xs"></i>
+        </div>
+        <span class="font-semibold text-base tracking-tight text-base-content sidebar-logo-text">Sailor</span>
+      </a>
+      <div class="sidebar-footer-text text-[10px] opacity-30 text-center">v{{.Version}}</div>
+    </div>
+  </aside>
+
+  {{/* 折叠按钮：骑在侧边栏右边框上（垂直居中），随开合平移；箭头方向指示折叠/展开 */}}
+  <button @click="sidebarOpen = !sidebarOpen"
+          class="fixed z-50 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-base-100 border border-base-300 shadow flex items-center justify-center text-[10px] text-base-content/60 hover:text-base-content hover:opacity-100 opacity-70 transition-all duration-200"
+          :class="[sidebarOpen ? 'left-[228px]' : 'left-[52px]', sidebarOpen ? '' : 'rotate-180']"
+          :title="sidebarOpen ? '收起侧栏' : '展开侧栏'">
+    <i class="fas fa-chevron-left transition-transform duration-200"></i>
+  </button>
+
+  <!-- Main Content -->
+  <main
+    class="main-content pt-12 min-h-screen"
+    :class="sidebarOpen ? 'ml-60' : 'ml-16'"
+  >
+    <!-- Page Header -->
+    {{/* 页头保持透明：与内容区共用同一块 fx 画布，不再垫 base-100 实底横条；
+       标题与面包屑同行（基线对齐），整体只占一行高度。 */}}
+    <div class="px-4 py-2.5">
+      <div class="flex items-center justify-between gap-4">
+        <div class="flex items-baseline gap-3 min-w-0">
+          <h1 class="fx-title text-lg font-semibold whitespace-nowrap">{{block "page_title" .}}Dashboard{{end}}</h1>
+          <div class="text-xs breadcrumbs opacity-50 py-0 min-w-0 overflow-hidden whitespace-nowrap">
+            <ul>
+              <li><a href="/" class="hover:text-primary transition-colors">首页</a></li>
+              {{block "breadcrumb" .}}{{end}}
+            </ul>
+          </div>
+        </div>
+        <div class="flex items-center gap-3">
+          {{/* 全局刷新指示：资源列表静默刷新时点亮（Alpine store 驱动，见 base_list） */}}
+          <span x-data x-cloak x-show="$store.ui && $store.ui.refreshing"
+                class="text-[11px] text-primary flex items-center gap-1.5 opacity-80"
+                title="正在同步集群最新数据">
+            <i class="fas fa-sync-alt fa-spin text-[10px]"></i> 刷新中
+          </span>
+          {{block "page_actions" .}}{{end}}
+        </div>
+      </div>
+    </div>
+
+    <!-- Flash Messages（等价于 Django messages）-->
+    {{if .Flash}}
+    <div class="px-4 pt-3 space-y-2">
+      <div class="alert alert-{{.Flash.Level}} shadow-sm border border-base-300" x-data="{ show: true }" x-show="show" x-transition>
+        <span class="text-sm">{{.Flash.Text}}</span>
+        <button @click="show = false" class="btn btn-ghost btn-xs">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+    {{end}}
+
+    <!-- Page Content -->
+    <div class="p-4 page-content">
+      {{block "content" .}}{{end}}
+    </div>
+  </main>
+
+  {{/* 弹框防误关守卫：必须在任何 showModal 调用前就位。 */}}
+  <script src="/static/js/modal-guard.js"></script>
+
+  <!-- Alpine.js -->
+  <script defer src="/static/js/alpine.min.js"></script>
+  <script>
+    // 终端 WS 网关端口（本地 127.0.0.1，Go 侧随机分配）
+    window.ARMADA_WS_PORT = {{.WSPort}};
+    // 全局 UI 状态（页头刷新指示灯读取，资源列表组件写入）
+    document.addEventListener('alpine:init', () => {
+      Alpine.store('ui', { refreshing: false });
+    });
+    // Theme persistence
+    (function() {
+      const saved = localStorage.getItem('theme');
+      if (saved) {
+        document.documentElement.setAttribute('data-theme', saved);
+        const toggle = document.getElementById('themeToggle');
+        if (toggle) toggle.checked = (saved === 'light');
+      }
+    })();
+    document.addEventListener('DOMContentLoaded', function() {
+      const toggle = document.getElementById('themeToggle');
+      if (toggle) {
+        toggle.addEventListener('change', function() {
+          const theme = this.checked ? 'light' : 'dark';
+          document.documentElement.setAttribute('data-theme', theme);
+          localStorage.setItem('theme', theme);
+        });
+      }
+    });
+  </script>
+  {{/* 视觉层驱动：GSAP 负责光斑漂移与粒子，sailor-fx.js 负责绑定交互效果。 */}}
+  <script src="/static/js/gsap.min.js"></script>
+  <script src="/static/js/sailor-fx.js"></script>
+  <script src="/static/js/vue-bits.js"></script>
+  {{/* xterm 需要先把 define 藏起来再加载，避免与 Monaco 的 AMD loader 撞车（详见 resource_modals 注释）。 */}}
+  <script>window.__armadaDefine = window.define; window.define = undefined;</script>
+  <script src="/static/js/xterm.js"></script>
+  <script src="/static/js/xterm-addon-fit.js"></script>
+  <script>window.define = window.__armadaDefine; delete window.__armadaDefine;</script>
+  {{template "toast" .}}
+  {{block "extra_js" .}}{{end}}
+</body>
+</html>

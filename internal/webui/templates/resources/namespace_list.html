@@ -1,0 +1,179 @@
+{{define "title"}}Namespaces - {{.Content.Cluster.DisplayName}} - Sailor{{end}}
+{{define "page_title"}}命名空间{{end}}
+{{define "breadcrumb"}}<li><a href="/clusters/{{.Content.Cluster.ID}}/">{{.Content.Cluster.DisplayName}}</a></li><li>Namespaces</li>{{end}}
+{{define "resource_icon"}}layer-group{{end}}
+{{define "resource_title"}}Namespaces{{end}}
+
+{{define "extra_actions"}}
+<button class="btn btn-primary btn-sm gap-1.5 h-8 min-h-0 text-xs" onclick="document.getElementById('createNsModal').showModal()">
+  <i class="fas fa-plus text-[10px]"></i> 新建
+</button>
+{{end}}
+
+{{define "table_headers"}}
+<th class="font-semibold text-xs">名称</th>
+<th class="font-semibold text-xs">状态</th>
+<th class="font-semibold text-xs">Age</th>
+<th class="font-semibold text-xs">操作</th>
+{{end}}
+
+{{define "table_row"}}
+<tr class="hover:bg-base-200/50 border-b border-base-300/50">
+  <td class="font-mono text-xs font-medium" x-text="r.name"></td>
+  <td>
+    <template x-if="r.status == 'Terminating'">
+      <span class="badge badge-xs gap-1 bg-orange-500/15 border border-orange-500/30 text-orange-400">
+        <i class="fas fa-spinner fa-spin text-[8px]"></i>
+        <span x-text="r.status"></span>
+      </span>
+    </template>
+    <template x-if="r.status != 'Terminating'">
+      <span class="badge badge-xs" :class="r.status == 'Active' ? 'badge-success' : 'badge-warning'" x-text="r.status"></span>
+    </template>
+  </td>
+  <td class="font-medium text-xs text-primary" x-text="r.age"></td>
+  <td>
+    <div class="row-actions">
+      <button type="button" class="row-action" title="YAML" @click="openYaml('Namespace: ' + r.name, '/resources/{{.Content.Cluster.ID}}/yaml/namespace/' + r.name + '/', true)">
+        <i class="fas fa-file-code"></i>
+      </button>
+      {{/* Terminating 状态下的应急按钮：移除 finalizer 强制完成删除 */}}
+      <template x-if="r.status == 'Terminating'">
+        <button type="button" class="row-action is-warn" title="移除 finalizer 强制完成（卡住超过 1 分钟时使用）"
+          @click="$dispatch('open-force-finalize', {name: r.name})">
+          <i class="fas fa-bolt"></i>
+        </button>
+      </template>
+      <template x-if="r.status != 'Terminating' && r.name != 'default' && r.name != 'kube-system' && r.name != 'kube-public' && r.name != 'kube-node-lease'">
+        <button type="button" class="row-action is-danger" title="删除" @click="$dispatch('open-delete-modal', {type: 'Namespace', name: r.name, namespace: '', deleteUrl: '/resources/{{.Content.Cluster.ID}}/namespaces/' + r.name + '/delete/'})">
+          <i class="fas fa-trash-alt"></i>
+        </button>
+      </template>
+    </div>
+  </td>
+</tr>
+{{end}}
+
+{{define "extra_js"}}
+<!-- 创建命名空间弹窗 -->
+<dialog id="createNsModal" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-primary/20 rounded-2xl shadow-2xl">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-plus-circle text-lg text-primary"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-base">创建命名空间</h3>
+        <p class="text-xs opacity-50 mt-0.5">在当前集群中创建新的命名空间</p>
+      </div>
+    </div>
+    <form x-data="{ submitting: false }" @submit.prevent="
+      submitting = true;
+      const fd = new FormData($el);
+      fetch('/resources/{{.Content.Cluster.ID}}/namespaces/create/', {
+        method: 'POST',
+        body: fd
+      })
+      .then(r => r.json())
+      .then(d => {
+        if(d.success) {
+          showToast('命名空间创建成功', 'success');
+          window.dispatchEvent(new CustomEvent('resource-updated', {
+            detail: {action: 'create', resource: d.resource}
+          }));
+          createNsModal.close();
+          $el.reset();
+          submitting = false;
+        } else {
+          showToast(d.error, 'error');
+          submitting = false;
+        }
+      })
+      .catch(e => { showToast(e, 'error'); submitting=false; });
+    ">
+      <div>
+        <label class="block text-xs font-medium opacity-50 mb-2">命名空间名称</label>
+        <input type="text" name="name" class="input input-bordered w-full h-10 focus:input-primary text-sm rounded-lg" placeholder="my-namespace" required pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]">
+        <p class="text-[11px] opacity-40 mt-1">只能包含小写字母、数字和连字符</p>
+      </div>
+      <div class="modal-action mt-6 gap-2.5">
+        <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" :disabled="submitting" onclick="createNsModal.close()">取消</button>
+        <button type="submit" class="btn btn-primary btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" :disabled="submitting">
+          <i :class="submitting ? 'fas fa-spinner fa-spin' : 'fas fa-check'" class="text-[10px]"></i>
+          <span x-text="submitting ? '创建中...' : '创建'"></span>
+        </button>
+      </div>
+    </form>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- 强制完成 Terminating 弹窗 -->
+<dialog id="forceFinalizeModal" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-warning/30 rounded-2xl shadow-2xl"
+    x-data="{nsName: '', submitting: false}"
+    @open-force-finalize.window="
+      nsName = $event.detail.name;
+      submitting = false;
+      if (forceFinalizeModal.open) forceFinalizeModal.close();
+      forceFinalizeModal.showModal();
+    ">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-11 h-11 rounded-xl bg-warning/10 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-bolt text-lg text-warning"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-base text-warning">强制完成 Terminating</h3>
+        <p class="text-xs opacity-50 mt-0.5">移除 namespace finalizer 让 K8s 立即删除</p>
+      </div>
+    </div>
+    <div class="bg-warning/5 border border-warning/20 rounded-xl p-4 space-y-2.5 text-xs leading-relaxed">
+      <div class="flex items-center gap-2">
+        <span class="opacity-50 w-12 shrink-0">名称</span>
+        <span class="font-mono font-bold" x-text="nsName"></span>
+      </div>
+      <div class="space-y-1.5 mt-2 pt-2 border-t border-warning/15">
+        <p class="font-medium opacity-80">⚠️ 此操作不可逆，仅在以下场景使用：</p>
+        <ul class="space-y-1 ml-4 list-disc opacity-70">
+          <li>namespace 已 Terminating 超过 1 分钟仍未消失</li>
+          <li>已确认 namespace 内无重要资源</li>
+          <li>常因集群侧 APIService 不可用 / controller 卡死导致</li>
+        </ul>
+        <p class="opacity-70 mt-2">
+          原理：<code class="bg-base-200 px-1 rounded">PUT /api/v1/namespaces/{name}/finalize</code>
+          清空 spec.finalizers，K8s 会立刻把它从 etcd 删除（不再清理内部资源）。
+        </p>
+      </div>
+    </div>
+    <div class="modal-action mt-6 gap-2.5">
+      <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium"
+        @click="forceFinalizeModal.close()">取消</button>
+      <button type="button" class="btn btn-warning btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105"
+        :disabled="submitting"
+        @click="
+          submitting = true;
+          fetch('/resources/{{.Content.Cluster.ID}}/namespaces/' + nsName + '/force-finalize/', {
+            method: 'POST'
+          })
+          .then(r => r.json())
+          .then(d => {
+            if(d.success) {
+              showToast(d.message || '已发送强制完成请求', 'success');
+              window.dispatchEvent(new CustomEvent('resource-updated', {
+                detail: {action: 'delete', type: 'Namespace', name: nsName, namespace: '', force: true}
+              }));
+              forceFinalizeModal.close();
+            } else {
+              showToast(d.error || '操作失败', 'error');
+              submitting = false;
+            }
+          })
+          .catch(e => { showToast(e, 'error'); submitting = false; });
+        ">
+        <i class="fas fa-bolt text-[10px]"></i> 确认强制完成
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+{{end}}

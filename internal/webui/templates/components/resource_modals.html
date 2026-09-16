@@ -1,0 +1,2156 @@
+{{define "resource_modals"}}
+<!-- YAML Editor Modal - 全屏风格 -->
+{{/* 弹窗骨架全部走主题 token（bg-base-100 / text-base-content / 语义色），
+   不再内联硬编码深色 —— 否则亮色主题下整个弹窗是一块突兀的黑面板。
+   Monaco 的编辑器配色由 monacoTheme() 单独跟随 data-theme（见下方脚本）。 */}}
+<dialog id="yamlModal" class="modal">
+  <div class="modal-box flex flex-col p-0 shadow-2xl bg-base-100 text-base-content rounded-2xl border border-base-300" style="width: 90vw; max-width: 90vw; height: 90vh; max-height: 90vh;">
+    <!-- 顶部标题栏 -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-base-300">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl flex items-center justify-center bg-primary/10">
+          <i class="fas fa-file-code text-base text-primary"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-base" id="yamlModalTitle">YAML 编辑器</h3>
+          <p class="text-[11px] mt-0.5 opacity-50" id="yamlModalPath">资源配置</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <label class="flex items-center gap-2.5 cursor-pointer px-3 py-1.5 rounded-lg transition-all hover:bg-base-content/5">
+          <span class="text-xs font-medium opacity-60">编辑模式</span>
+          <input type="checkbox" id="yamlReadonlyToggle" class="toggle toggle-primary toggle-sm" checked>
+        </label>
+        <button class="btn btn-ghost btn-sm btn-circle w-9 h-9 min-h-0 opacity-60 hover:opacity-100 transition-all" onclick="yamlModal.close()">
+          <i class="fas fa-times text-sm"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- 提示条：根据 edit / create / readonly 三种模式切换文案 -->
+    <div id="yamlEditTip" class="px-6 py-3 flex items-center gap-3 bg-info/10 border-b border-info/20">
+      <i class="fas fa-info-circle text-sm text-info"></i>
+      <span class="text-xs leading-relaxed text-info">修改 YAML 后点击「应用到集群」将直接更新资源配置，请确认修改内容无误后再提交。</span>
+    </div>
+    <div id="yamlCreateTip" class="hidden px-6 py-3 flex items-center gap-3 bg-primary/10 border-b border-primary/20">
+      <i class="fas fa-plus-circle text-sm text-primary"></i>
+      <span class="text-xs leading-relaxed text-primary">编辑 YAML 模板（已预填示例），确认 name / namespace / image 等字段正确后点击「创建」即可。</span>
+    </div>
+    <div id="yamlReadonlyTip" class="hidden px-6 py-3 flex items-center gap-3 bg-base-content/5 border-b border-base-content/10">
+      <i class="fas fa-eye text-sm opacity-60"></i>
+      <span class="text-xs leading-relaxed opacity-70">仅查看模式。Pod 等由上层控制器（Deployment / StatefulSet 等）管理的资源不支持直接编辑，请改上层资源的 template 触发滚动更新。</span>
+    </div>
+
+    <!-- Monaco 编辑器区域 -->
+    <div id="monacoContainer" class="flex-1" style="min-height: 0;"></div>
+
+    <!-- 错误提示 -->
+    <div id="yamlError" class="hidden px-6 py-3 text-xs flex items-center gap-2.5 bg-error/10 border-t border-error/25 text-error">
+      <i class="fas fa-exclamation-circle text-sm"></i>
+      <span id="yamlErrorText" class="leading-relaxed"></span>
+    </div>
+
+    <!-- 成功提示 -->
+    <div id="yamlSuccess" class="hidden px-6 py-3 text-xs flex items-center gap-2.5 bg-success/10 border-t border-success/25 text-success">
+      <i class="fas fa-check-circle text-sm"></i>
+      <span id="yamlSuccessText" class="leading-relaxed"></span>
+    </div>
+
+    <!-- 底部操作栏 -->
+    <div class="flex items-center justify-between px-6 py-4 border-t border-base-300">
+      <span class="text-xs font-medium opacity-50" id="yamlStatus">就绪</span>
+      <div class="flex gap-2.5">
+        <button class="btn btn-sm h-9 min-h-0 px-5 text-xs font-medium rounded-lg bg-base-content/5 border border-base-content/10 text-base-content/80 hover:bg-base-content/10 transition-all" onclick="yamlModal.close()">
+          <i class="fas fa-times mr-1.5 text-[10px]"></i> 取消
+        </button>
+        <button class="btn btn-sm h-9 min-h-0 px-5 text-xs font-medium rounded-lg bg-info/10 border border-info/30 text-info hover:bg-info/20 transition-all" id="yamlValidateBtn" onclick="validateYaml()">
+          <i class="fas fa-check-double mr-1.5 text-[10px]"></i> 验证语法
+        </button>
+        <button class="btn btn-primary btn-sm h-9 min-h-0 px-5 text-xs font-medium rounded-lg shadow-lg transition-all hover:scale-105" id="yamlApplyBtn" onclick="applyYaml()">
+          <i class="fas fa-cloud-upload-alt mr-1.5 text-[10px]"></i> 应用到集群
+        </button>
+      </div>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- Delete Confirm Modal -->
+<dialog id="deleteModal" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-error/20 rounded-2xl shadow-2xl"
+    x-data="{resType: '', forceDelete: false}"
+    @open-delete-modal.window="
+      resType = $event.detail.type;
+      forceDelete = false;
+      $el.querySelector('#deleteResourceType').textContent = $event.detail.type;
+      $el.querySelector('#deleteResourceName').textContent = $event.detail.name;
+      $el.querySelector('#deleteResourceNs').textContent = $event.detail.namespace || '';
+      $el.dataset.deleteUrl = $event.detail.deleteUrl;
+      if (deleteModal.open) deleteModal.close();
+      deleteModal.showModal();
+    ">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-11 h-11 rounded-xl bg-error/10 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-exclamation-triangle text-lg text-error"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-base text-error">确认删除</h3>
+        <p class="text-xs opacity-50 mt-0.5">此操作不可撤销，请谨慎操作</p>
+      </div>
+    </div>
+    <div class="bg-error/5 border border-error/15 rounded-xl p-4 space-y-2.5">
+      <div class="flex items-center gap-3"><span class="text-[11px] opacity-40 w-14">类型</span> <span id="deleteResourceType" class="font-semibold text-sm"></span></div>
+      <div class="flex items-center gap-3"><span class="text-[11px] opacity-40 w-14">名称</span> <span id="deleteResourceName" class="font-bold text-sm text-error font-mono break-all"></span></div>
+      <div class="flex items-center gap-3" x-show="$el.closest('.modal-box').querySelector('#deleteResourceNs').textContent">
+        <span class="text-[11px] opacity-40 w-14">命名空间</span> <span id="deleteResourceNs" class="font-medium text-sm"></span>
+      </div>
+    </div>
+
+    <!-- 强制删除选项 - 仅对 Pod 展示 -->
+    <template x-if="resType === 'Pod'">
+      <label class="flex items-start gap-2.5 mt-3 p-3 rounded-lg bg-orange-500/5 border border-orange-500/20 cursor-pointer hover:bg-orange-500/10 transition-colors">
+        <input type="checkbox" x-model="forceDelete" class="checkbox checkbox-xs checkbox-warning mt-0.5">
+        <div class="flex-1">
+          <div class="text-xs font-medium text-orange-400">强制删除（跳过 30 秒优雅退出期）</div>
+          <div class="text-[10px] opacity-50 mt-0.5 leading-relaxed">
+            <i class="fas fa-exclamation-triangle text-[9px] mr-1"></i>
+            对 StatefulSet / 带 PV / 数据库等有状态 Pod 可能导致 PV 挂载冲突或数据丢失，请谨慎勾选
+          </div>
+        </div>
+      </label>
+    </template>
+
+    <!-- Namespace 专属：级联删除警告（按用户要求，资源类删除不要输入名称确认，
+         只有 cluster 删除才需要输入名字） -->
+    <template x-if="resType === 'Namespace'">
+      <div class="mt-3 p-3 rounded-lg bg-orange-500/5 border border-orange-500/30">
+        <div class="flex items-start gap-2">
+          <i class="fas fa-exclamation-triangle text-orange-400 text-sm mt-0.5"></i>
+          <div class="flex-1">
+            <div class="text-xs font-semibold text-orange-400 mb-1">级联删除警告</div>
+            <div class="text-[11px] opacity-80 leading-relaxed">
+              K8s 会一并清理该命名空间内的<strong>所有资源</strong>，包括：
+            </div>
+            <div class="flex flex-wrap gap-1 mt-1.5">
+              <template x-for="kind in ['Deployments','StatefulSets','DaemonSets','Pods','Services','Ingresses','ConfigMaps','Secrets','PVCs','Jobs/CronJobs']">
+                <span class="text-[10px] px-1.5 py-0.5 rounded bg-orange-500/15 text-orange-300 font-mono" x-text="kind"></span>
+              </template>
+            </div>
+            <div class="text-[10px] opacity-60 mt-2 leading-relaxed">
+              此操作不可撤销。如果 namespace 内还有 PV/PVC，请确认存储不再需要。
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <div class="modal-action mt-6 gap-2.5">
+      <button class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="deleteModal.close()">取消</button>
+      <button class="btn btn-error btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105"
+        @click="
+          const modalBox = $el.closest('.modal-box');
+          const deletedName = modalBox.querySelector('#deleteResourceName').textContent;
+          const deletedNs = modalBox.querySelector('#deleteResourceNs').textContent;
+          const deletedType = modalBox.querySelector('#deleteResourceType').textContent;
+          const useForce = forceDelete;
+          const url = modalBox.dataset.deleteUrl + (useForce ? '?force=1' : '');
+          fetch(url, {
+            method: 'POST',
+            headers: {}
+          })
+          .then(r => r.json())
+          .then(d => {
+            if(d.success) {
+              showToast(useForce ? '已强制删除' : '删除成功', 'success');
+              window.dispatchEvent(new CustomEvent('resource-updated', {
+                detail: {action: 'delete', type: deletedType, name: deletedName, namespace: deletedNs, force: useForce}
+              }));
+            } else {
+              showToast(d.error, 'error');
+            }
+          })
+          .catch(e => showToast(e, 'error'));
+          deleteModal.close();
+        ">
+        <i class="fas fa-trash-alt text-[10px]"></i>
+        <span x-text="forceDelete ? '强制删除' : '确认删除'"></span>
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- Scale Modal -->
+<dialog id="scaleModal" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-primary/20 rounded-2xl shadow-2xl" x-data="{ replicas: 0, current: 0 }" @open-scale-modal.window="
+    current = $event.detail.current;
+    replicas = $event.detail.current;
+    $el.querySelector('#scaleResourceName').textContent = $event.detail.name;
+    $el.dataset.scaleUrl = $event.detail.scaleUrl;
+    if (scaleModal.open) scaleModal.close();
+    scaleModal.showModal();
+  ">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-expand-arrows-alt text-lg text-primary"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-base">扩缩容</h3>
+        <p class="text-xs opacity-50 mt-0.5">调整 <span id="scaleResourceName" class="font-semibold text-primary"></span> 的副本数</p>
+      </div>
+    </div>
+    <div class="space-y-5">
+      <div class="flex items-center justify-center gap-5 py-4 bg-base-200/50 rounded-xl">
+        <div class="text-center">
+          <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1">当前</div>
+          <div class="text-2xl font-bold opacity-60" x-text="current"></div>
+        </div>
+        <i class="fas fa-arrow-right text-primary opacity-60"></i>
+        <div class="text-center">
+          <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1">目标</div>
+          <div class="text-2xl font-bold text-primary" x-text="replicas"></div>
+        </div>
+      </div>
+      <div class="space-y-3">
+        <input type="range" min="0" max="50" x-model.number="replicas" class="range range-primary range-sm">
+        <div class="flex items-center gap-3">
+          <input type="number" min="0" max="999" x-model.number="replicas" class="input input-bordered w-28 h-10 text-center text-sm font-semibold rounded-lg focus:input-primary">
+          <span class="text-xs opacity-40">个副本</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-action mt-6 gap-2.5">
+      <button class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="scaleModal.close()">取消</button>
+      <button class="btn btn-primary btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" @click="
+        fetch($el.closest('.modal-box').dataset.scaleUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({replicas: replicas})
+        })
+        .then(r => r.json())
+        .then(d => {
+          if(d.success) {
+            showToast('副本数调整成功', 'success');
+            if (d.resource) {
+              window.dispatchEvent(new CustomEvent('resource-updated', {detail: {action: 'update', resource: d.resource}}));
+            } else {
+              window.dispatchEvent(new CustomEvent('resource-updated'));
+            }
+          } else {
+            showToast(d.error, 'error');
+          }
+        })
+        .catch(e => showToast(e, 'error'));
+        scaleModal.close();
+      ">
+        <i class="fas fa-check text-[10px]"></i> 确认调整
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- Restart Confirm Modal -->
+<dialog id="restartModal" class="modal">
+  <div class="modal-box max-w-md bg-base-100 border border-warning/20 rounded-2xl shadow-2xl" x-data @open-restart-modal.window="
+    $el.querySelector('#restartResourceName').textContent = $event.detail.name;
+    $el.dataset.restartUrl = $event.detail.restartUrl;
+    if (restartModal.open) restartModal.close();
+    restartModal.showModal();
+  ">
+    <div class="flex items-center gap-3 mb-5">
+      <div class="w-11 h-11 rounded-xl bg-warning/10 flex items-center justify-center flex-shrink-0">
+        <i class="fas fa-redo text-lg text-warning"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-base text-warning">确认重启</h3>
+        <p class="text-xs opacity-50 mt-0.5">将触发滚动更新以重启所有 Pod</p>
+      </div>
+    </div>
+    <div class="bg-warning/5 border border-warning/15 rounded-xl p-4 space-y-2.5">
+      <p class="text-sm leading-relaxed">确定要重启 <span id="restartResourceName" class="font-bold font-mono"></span> 吗？</p>
+      <div class="text-xs leading-relaxed opacity-70 space-y-1.5">
+        <p><i class="fas fa-info-circle text-warning mr-1.5"></i>重启将通过滚动更新方式逐步替换所有 Pod。</p>
+        <p><i class="fas fa-check-circle text-success mr-1.5"></i>服务不会中断，新 Pod 就绪后旧 Pod 才会被终止。</p>
+      </div>
+    </div>
+    <div class="modal-action mt-6 gap-2.5">
+      <button class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="restartModal.close()">取消</button>
+      <button class="btn btn-warning btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" @click="
+        fetch($el.closest('.modal-box').dataset.restartUrl, {
+          method: 'POST',
+          headers: {}
+        })
+        .then(r => r.json())
+        .then(d => {
+          if(d.success) {
+            showToast('重启触发成功', 'success');
+            if (d.resource) {
+              window.dispatchEvent(new CustomEvent('resource-updated', {detail: {action: 'update', resource: d.resource}}));
+            } else {
+              window.dispatchEvent(new CustomEvent('resource-updated'));
+            }
+          } else {
+            showToast(d.error, 'error');
+          }
+        })
+        .catch(e => showToast(e, 'error'));
+        restartModal.close();
+      ">
+        <i class="fas fa-redo text-[10px]"></i> 确认重启
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- Workload Describe Modal (Deployment/StatefulSet/DaemonSet) -->
+<dialog id="describeModal" class="modal" x-data="describeViewer()" @open-deployment-describe.window="open($event.detail, 'deployment')" @open-statefulset-describe.window="open($event.detail, 'statefulset')" @open-daemonset-describe.window="open($event.detail, 'daemonset')" @open-service-describe.window="open($event.detail, 'service')" @resource-updated.window="handleResourceUpdate($event)" @close="_stopAuto(); window.dispatchEvent(new CustomEvent('resource-updated', {detail: {}}))">
+  <div class="modal-box bg-base-100 shadow-2xl flex flex-col p-0" style="width: 85vw; max-width: 85vw; height: 88vh; border-radius: 20px;">
+    <!-- Header -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-base-200 flex-shrink-0">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl grid place-items-center bg-primary/10">
+          <i class="fas text-base text-primary" :class="resourceType === 'deployment' ? 'fa-rocket' : resourceType === 'statefulset' ? 'fa-database' : resourceType === 'service' ? 'fa-network-wired' : 'fa-clone'"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-base" x-text="(resourceType === 'deployment' ? 'Deployment' : resourceType === 'statefulset' ? 'StatefulSet' : resourceType === 'service' ? 'Service' : 'DaemonSet') + ' 详情'"></h3>
+          <div class="flex items-center gap-2 text-xs opacity-50 mt-0.5">
+            <span class="font-mono" x-text="meta.namespace"></span>
+            <span>/</span>
+            <span class="font-semibold" x-text="meta.name"></span>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button class="btn btn-ghost btn-sm gap-1 text-xs" @click="reload()" :disabled="loading">
+          <i class="fas fa-sync-alt text-xs" :class="loading ? 'animate-spin' : ''"></i> 刷新
+        </button>
+        <button class="btn btn-ghost btn-sm btn-circle" onclick="describeModal.close()">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Tab 切换 -->
+    <div class="flex items-center gap-1 px-6 pt-3 pb-1 flex-shrink-0">
+      <template x-for="t in tabs" :key="t.key">
+        <button class="btn btn-sm gap-1.5 text-xs"
+                :class="tab === t.key ? 'btn-primary' : 'btn-ghost'"
+                @click="tab = t.key">
+          <i class="fas text-xs" :class="t.icon"></i>
+          <span x-text="t.label"></span>
+          <span x-show="t.count !== undefined" class="badge badge-xs" x-text="t.count"></span>
+        </button>
+      </template>
+    </div>
+
+    <!-- 内容 -->
+    <div class="flex-1 overflow-y-auto px-6 py-4 text-sm">
+      <div x-show="loading" class="flex items-center justify-center py-20 gap-3 opacity-50">
+        <span class="loading loading-spinner loading-md text-primary"></span>
+        <span class="text-sm">加载中...</span>
+      </div>
+      <div x-show="!loading && error" class="alert alert-error text-xs"><i class="fas fa-exclamation-triangle"></i><span x-text="error"></span></div>
+
+      <!-- Tab: 概览 -->
+      <div x-show="!loading && !error && tab === 'overview'" x-cloak class="space-y-5">
+        <!-- 健康总览：任意 condition 异常时强提示 -->
+        <template x-if="abnormalConditions.length > 0">
+          <div class="alert alert-error">
+            <i class="fas fa-exclamation-triangle"></i>
+            <div class="flex-1">
+              <div class="font-semibold text-sm mb-2">
+                <span x-text="resourceTypeLabel"></span> 当前不健康（<span x-text="abnormalConditions.length"></span> 个异常状态）
+              </div>
+              <template x-for="c in abnormalConditions" :key="c.type">
+                <div class="text-xs mb-1.5 last:mb-0 opacity-90">
+                  <span class="font-mono font-semibold" x-text="c.type + '=' + c.status"></span>
+                  <span class="opacity-50"> · </span>
+                  <span class="font-mono" x-text="c.reason"></span>
+                  <div class="mt-0.5 ml-1 opacity-70" x-show="c.message" x-text="c.message"></div>
+                </div>
+              </template>
+              <template x-if="podBlockReasons.length > 0">
+                <div class="mt-3 pt-3 text-xs border-t border-error/20">
+                  <div class="mb-1.5 opacity-70 font-medium">关联 Pod 卡点：</div>
+                  <template x-for="r in podBlockReasons" :key="r">
+                    <span class="badge badge-sm badge-outline mr-1.5 mb-1" x-text="r"></span>
+                  </template>
+                  <span class="opacity-50 text-xs">→ 切到「关联 Pods」标签查看</span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- 通用健康状态提示横幅（适用于 Deployment / StatefulSet / DaemonSet） -->
+
+        <!-- 滚动更新进行中（蓝色） -->
+        <template x-if="isRolling">
+          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #e0f2fe; border-color: #7dd3fc; color: #0c4a6e;">
+            <i class="fas fa-sync-alt animate-spin mt-0.5" style="color: #0284c7;"></i>
+            <div class="text-xs leading-relaxed">
+              <span class="font-semibold text-sm block mb-1">滚动更新进行中</span>
+              <template x-if="resourceType === 'daemonset'">
+                <span>已更新 <span class="font-semibold" x-text="info.updated"></span> / <span x-text="info.desired"></span> 个节点，DaemonSet 正在逐节点更新 Pod。</span>
+              </template>
+              <template x-if="resourceType === 'statefulset'">
+                <span>已更新 <span class="font-semibold" x-text="info.updated_replicas"></span> / <span x-text="info.replicas"></span> 个副本，StatefulSet 按序号逆序更新（从大到小）。</span>
+              </template>
+              <template x-if="resourceType === 'deployment'">
+                <span>已更新 <span class="font-semibold" x-text="info.updated_replicas"></span> / <span x-text="info.replicas"></span> 个副本，K8s 正在逐步替换旧 Pod。</span>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- Pod 启动异常（红色）：有 Pod 处于异常状态 -->
+        <template x-if="podBlockReasons.length > 0">
+          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #fef2f2; border-color: #fca5a5; color: #7f1d1d;">
+            <i class="fas fa-exclamation-triangle mt-0.5" style="color: #dc2626;"></i>
+            <div class="text-xs leading-relaxed">
+              <span class="font-semibold text-sm block mb-1">Pod 异常</span>
+              存在异常状态的 Pod：<span class="font-semibold" x-text="podBlockReasons.join('、')"></span><br>
+              <span class="text-xs" style="opacity: 0.7;">→ 请检查镜像地址是否正确、资源配额是否充足；或在「关联 Pods」标签中删除异常 Pod 触发重建。</span>
+            </div>
+          </div>
+        </template>
+
+        <!-- 扩容/启动中（黄色）：就绪数 < 期望数，但没有异常 Pod -->
+        <template x-if="isScaling && podBlockReasons.length === 0">
+          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #fef9c3; border-color: #fcd34d; color: #78350f;">
+            <i class="fas fa-spinner fa-spin mt-0.5" style="color: #d97706;"></i>
+            <div class="text-xs leading-relaxed">
+              <span class="font-semibold text-sm block mb-1">副本启动中</span>
+              <template x-if="resourceType !== 'daemonset'">
+                <span>就绪 <span class="font-semibold" x-text="info.ready_replicas || 0"></span> / 期望 <span x-text="info.replicas"></span> 个副本，Pod 正在拉取镜像或等待调度。</span>
+              </template>
+              <template x-if="resourceType === 'daemonset'">
+                <span>就绪 <span class="font-semibold" x-text="info.ready || 0"></span> / 期望 <span x-text="info.desired"></span> 个节点，Pod 正在拉取镜像或等待调度。</span>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- Pod 数量超出期望（黄色）：缩容后旧 Pod 未删除 -->
+        <template x-if="!isRolling && !isScaling && podBlockReasons.length === 0 && (resourceType === 'deployment' || resourceType === 'statefulset') && pods.length > (info.replicas || 0) && (info.replicas || 0) > 0">
+          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #fef9c3; border-color: #fcd34d; color: #78350f;">
+            <i class="fas fa-info-circle mt-0.5" style="color: #d97706;"></i>
+            <div class="text-xs leading-relaxed">
+              <span class="font-semibold text-sm block mb-1">为什么显示 <span x-text="pods.length"></span> 个 Pod，但期望副本数是 <span x-text="info.replicas"></span>？</span>
+              滚动更新时旧 Pod 需等新 Pod 就绪后才会被删除。当新 Pod 因镜像错误等原因一直无法就绪时，旧 Pod 会持续保留。<br>
+              <span class="text-xs" style="opacity: 0.7;">→ 修复镜像问题后 K8s 会自动收敛；或回滚到正常版本；也可手动删除多余 Pod。</span>
+            </div>
+          </div>
+        </template>
+
+        <!-- 副本状态卡片 - Deployment -->
+        <template x-if="resourceType === 'deployment'">
+          <div class="grid grid-cols-4 gap-3">
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-crosshairs text-primary mb-1"></i>
+              <div class="text-2xl font-bold text-primary" x-text="info.replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">期望副本</div>
+            </div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-check-circle text-success mb-1"></i>
+              <div class="text-2xl font-bold text-success" x-text="info.ready_replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">就绪</div>
+            </div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-arrow-up text-info mb-1"></i>
+              <div class="text-2xl font-bold text-info" x-text="info.updated_replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">已更新</div>
+            </div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-times-circle text-error mb-1"></i>
+              <div class="text-2xl font-bold text-error" x-text="info.unavailable_replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">不可用</div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 副本状态卡片 - StatefulSet -->
+        <template x-if="resourceType === 'statefulset'">
+          <div class="grid grid-cols-4 gap-3">
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-crosshairs text-primary mb-1"></i>
+              <div class="text-2xl font-bold text-primary" x-text="info.replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">期望副本</div>
+            </div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-check-circle text-success mb-1"></i>
+              <div class="text-2xl font-bold text-success" x-text="info.ready_replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">就绪</div>
+            </div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-arrow-up text-info mb-1"></i>
+              <div class="text-2xl font-bold text-info" x-text="info.updated_replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">已更新</div>
+            </div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-server text-accent mb-1"></i>
+              <div class="text-2xl font-bold text-accent" x-text="info.current_replicas ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">当前</div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 副本状态卡片 - DaemonSet -->
+        <template x-if="resourceType === 'daemonset'">
+          <div class="grid grid-cols-4 gap-3">
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-crosshairs text-primary mb-1"></i>
+              <div class="text-2xl font-bold text-primary" x-text="info.desired ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">期望节点数</div>
+            </div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-check-circle text-success mb-1"></i>
+              <div class="text-2xl font-bold text-success" x-text="info.ready ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">就绪</div>
+            </div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-arrow-up text-info mb-1"></i>
+              <div class="text-2xl font-bold text-info" x-text="info.updated ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">已更新</div>
+            </div>
+            <div class="bg-base-200 rounded-xl p-4 text-center">
+              <i class="fas fa-check-double text-secondary mb-1"></i>
+              <div class="text-2xl font-bold text-secondary" x-text="info.available ?? 0"></div>
+              <div class="text-xs opacity-50 mt-1">可用</div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 基本信息 - Deployment -->
+        <template x-if="resourceType === 'deployment'">
+          <div class="card bg-base-200 shadow">
+            <div class="card-body p-5 gap-4">
+              <h4 class="card-title text-sm">
+                <i class="fas fa-info-circle text-xs text-primary"></i> 基本信息
+              </h4>
+              <div class="grid grid-cols-2 gap-y-3 gap-x-6">
+                <template x-for="item in [
+                  {k:'命名空间', v: info.namespace},
+                  {k:'创建时间', v: info.created},
+                  {k:'更新策略', v: info.strategy?.type || '-'},
+                  {k:'滚动参数', v: (info.strategy?.max_surge || '-') + ' / ' + (info.strategy?.max_unavailable || '-')},
+                  {k:'Generation', v: info.generation + ' (observed: ' + info.observed_generation + ')'},
+                  {k:'Selector', v: Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'}
+                ]">
+                  <div class="flex items-baseline gap-3 text-xs">
+                    <span class="flex-shrink-0 w-20 text-right opacity-50" x-text="item.k"></span>
+                    <span class="font-mono break-all" x-text="item.v"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 基本信息 - StatefulSet -->
+        <template x-if="resourceType === 'statefulset'">
+          <div class="card bg-base-200 shadow">
+            <div class="card-body p-5 gap-4">
+              <h4 class="card-title text-sm">
+                <i class="fas fa-info-circle text-xs text-primary"></i> 基本信息
+              </h4>
+              <div class="grid grid-cols-2 gap-y-3 gap-x-6">
+                <template x-for="item in [
+                  {k:'命名空间', v: info.namespace},
+                  {k:'创建时间', v: info.created},
+                  {k:'Service', v: info.service_name || '-'},
+                  {k:'Pod 管理策略', v: info.pod_management_policy || '-'},
+                  {k:'更新策略', v: info.strategy?.type || '-'},
+                  {k:'Partition', v: String(info.strategy?.partition ?? '-')},
+                  {k:'Generation', v: info.generation + ' (observed: ' + info.observed_generation + ')'},
+                  {k:'Selector', v: Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'}
+                ]">
+                  <div class="flex items-baseline gap-3 text-xs">
+                    <span class="flex-shrink-0 w-24 text-right opacity-50" x-text="item.k"></span>
+                    <span class="font-mono break-all" x-text="item.v"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 基本信息 - DaemonSet -->
+        <template x-if="resourceType === 'daemonset'">
+          <div class="card bg-base-200 shadow">
+            <div class="card-body p-5 gap-4">
+              <h4 class="card-title text-sm">
+                <i class="fas fa-info-circle text-xs text-primary"></i> 基本信息
+              </h4>
+              <div class="grid grid-cols-2 gap-y-3 gap-x-6">
+                <template x-for="item in [
+                  {k:'命名空间', v: info.namespace},
+                  {k:'创建时间', v: info.created},
+                  {k:'更新策略', v: info.strategy?.type || '-'},
+                  {k:'maxUnavailable', v: info.strategy?.max_unavailable || '-'},
+                  {k:'Generation', v: info.generation + ' (observed: ' + info.observed_generation + ')'},
+                  {k:'Selector', v: Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'}
+                ]">
+                  <div class="flex items-baseline gap-3 text-xs">
+                    <span class="flex-shrink-0 w-24 text-right opacity-50" x-text="item.k"></span>
+                    <span class="font-mono break-all" x-text="item.v"></span>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 基本信息 - Service -->
+        <template x-if="resourceType === 'service'">
+          <div class="card bg-base-200 shadow">
+            <div class="card-body p-5 gap-4">
+              <h4 class="card-title text-sm">
+                <i class="fas fa-info-circle text-xs text-primary"></i> 基本信息
+              </h4>
+              <div class="grid grid-cols-2 gap-y-3 gap-x-6">
+                <template x-for="item in [
+                  {k:'命名空间', v: info.namespace},
+                  {k:'创建时间', v: info.created},
+                  {k:'类型', v: info.type || '-'},
+                  {k:'Cluster IP', v: info.cluster_ip || '-'},
+                  {k:'Session Affinity', v: info.session_affinity || '-'},
+                  {k:'Selector', v: Object.entries(info.selector || {}).map(([k,v]) => k+'='+v).join(', ') || '-'}
+                ]">
+                  <div class="flex items-baseline gap-3 text-xs">
+                    <span class="flex-shrink-0 w-24 text-right opacity-50" x-text="item.k"></span>
+                    <span class="font-mono break-all" x-text="item.v"></span>
+                  </div>
+                </template>
+              </div>
+              <template x-if="(info.lb_ingress || []).length > 0">
+                <div class="flex items-baseline gap-3 text-xs mt-1">
+                  <span class="flex-shrink-0 w-24 text-right opacity-50">External IP</span>
+                  <span class="font-mono break-all" x-text="info.lb_ingress.join(', ')"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- 端口映射 - Service -->
+        <template x-if="resourceType === 'service'">
+          <div class="card bg-base-200 shadow">
+            <div class="card-body p-5 gap-4">
+              <h4 class="card-title text-sm">
+                <i class="fas fa-exchange-alt text-xs text-info"></i> 端口映射
+              </h4>
+              <div class="overflow-x-auto">
+                <table class="table table-sm">
+                  <thead>
+                    <tr>
+                      <th>名称</th><th>协议</th><th>端口</th><th>目标端口</th>
+                      <template x-if="(info.ports || []).some(p => p.node_port)"><th>NodePort</th></template>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template x-for="p in info.ports || []" :key="p.port + p.protocol">
+                      <tr>
+                        <td class="font-mono text-xs" x-text="p.name"></td>
+                        <td class="text-xs" x-text="p.protocol"></td>
+                        <td class="font-mono text-xs font-semibold" x-text="p.port"></td>
+                        <td class="font-mono text-xs" x-text="p.target_port"></td>
+                        <template x-if="p.node_port"><td class="font-mono text-xs text-primary font-semibold" x-text="p.node_port"></td></template>
+                      </tr>
+                    </template>
+                    <tr x-show="(info.ports || []).length === 0"><td colspan="5" class="text-center opacity-40">无端口配置</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- 容器 (仅工作负载，Service 不显示) -->
+        <div class="card bg-base-200 shadow" x-show="resourceType !== 'service'">
+          <div class="card-body p-5 gap-4">
+            <h4 class="card-title text-sm">
+              <i class="fas fa-cube text-xs text-info"></i> 容器
+            </h4>
+            <div class="space-y-2">
+              <template x-for="c in info.containers || []" :key="c.name">
+                <div class="flex items-center gap-3 p-3 rounded-lg bg-base-100">
+                  <div class="w-8 h-8 rounded-lg grid place-items-center flex-shrink-0 bg-info/10">
+                    <i class="fas fa-box text-xs text-info"></i>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <div class="font-semibold text-xs" x-text="c.name"></div>
+                    <div class="font-mono text-xs truncate opacity-60" x-text="c.image"></div>
+                  </div>
+                  <div x-show="c.ports?.length" class="flex-shrink-0">
+                    <template x-for="port in (c.ports || [])">
+                      <span class="badge badge-sm badge-outline ml-1 font-mono" x-text="port"></span>
+                    </template>
+                  </div>
+                </div>
+              </template>
+            </div>
+            <div x-show="(info.containers || []).length === 0" class="text-xs text-center opacity-40">无容器信息</div>
+          </div>
+        </div>
+
+        <!-- Conditions (仅工作负载) -->
+        <div class="card bg-base-200 shadow" x-show="resourceType !== 'service'">
+          <div class="card-body p-5 gap-4">
+            <h4 class="card-title text-sm">
+              <i class="fas fa-heartbeat text-xs text-success"></i> Conditions
+            </h4>
+            <div class="overflow-x-auto">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>类型</th>
+                    <th>状态</th>
+                    <th>原因</th>
+                    <th>消息</th>
+                    <th>最近更新</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="c in conditions" :key="c.type">
+                    <tr :class="((c.type === 'Available' || c.type === 'Progressing') && c.status !== 'True') || (c.type === 'ReplicaFailure' && c.status === 'True') ? 'bg-error/5' : ''">
+                      <td class="font-medium" x-text="c.type"></td>
+                      <td>
+                        <span class="badge badge-sm"
+                              :class="c.status === 'True' ? 'badge-success' : c.status === 'False' ? 'badge-error' : 'badge-warning'"
+                              x-text="c.status"></span>
+                      </td>
+                      <td class="font-mono text-xs"
+                          :class="((c.type === 'Available' || c.type === 'Progressing') && c.status !== 'True') || (c.type === 'ReplicaFailure' && c.status === 'True') ? 'text-error font-semibold' : 'opacity-70'"
+                          x-text="c.reason"></td>
+                      <td class="opacity-60 max-w-xs truncate" x-text="c.message"></td>
+                      <td class="whitespace-nowrap opacity-50" x-text="c.last_update"></td>
+                    </tr>
+                  </template>
+                  <tr x-show="conditions.length === 0"><td colspan="5" class="text-center opacity-40">无</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Endpoints (Service only) -->
+      <div x-show="!loading && !error && tab === 'endpoints'" x-cloak>
+        <div class="card bg-base-200 shadow">
+          <div class="card-body p-5 gap-4">
+            <h4 class="card-title text-sm">
+              <i class="fas fa-plug text-xs text-success"></i> Endpoints
+              <span class="badge badge-sm" x-text="endpoints.length"></span>
+            </h4>
+            <div class="overflow-x-auto">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>IP</th>
+                    <th>端口</th>
+                    <th>状态</th>
+                    <th>目标</th>
+                    <th>节点</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="ep in endpoints" :key="ep.ip + ep.target">
+                    <tr>
+                      <td class="font-mono text-xs font-semibold" x-text="ep.ip"></td>
+                      <td class="font-mono text-xs opacity-70" x-text="(ep.ports || []).map(p => p.port + '/' + p.protocol).join(', ')"></td>
+                      <td>
+                        <span class="badge badge-sm" :class="ep.ready ? 'badge-success' : 'badge-error'" x-text="ep.ready ? 'Ready' : 'NotReady'"></span>
+                      </td>
+                      <td class="text-xs opacity-70" x-text="ep.target || '-'"></td>
+                      <td class="text-xs opacity-50" x-text="ep.node"></td>
+                    </tr>
+                  </template>
+                  <tr x-show="endpoints.length === 0"><td colspan="5" class="text-center opacity-40">无 Endpoint</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Events -->
+      <div x-show="!loading && !error && tab === 'events'" x-cloak>
+        <div class="card bg-base-200 shadow">
+          <div class="card-body p-5 gap-4">
+            <div class="overflow-x-auto">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>类型</th>
+                    <th>原因</th>
+                    <th>对象</th>
+                    <th>来源</th>
+                    <th class="text-center">次数</th>
+                    <th>消息</th>
+                    <th>最近时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="(e, i) in pagedEvents" :key="i">
+                    <tr>
+                      <td>
+                        <span class="badge badge-sm"
+                              :class="e.type === 'Normal' ? 'badge-info' : 'badge-warning'"
+                              x-text="e.type"></span>
+                      </td>
+                      <td class="font-mono font-medium" x-text="e.reason"></td>
+                      <td class="font-mono text-xs opacity-50 whitespace-nowrap" :title="e.object" x-text="e.object || '-'"></td>
+                      <td class="opacity-50" x-text="e.source"></td>
+                      <td class="text-center font-semibold" x-text="e.count"></td>
+                      <td class="opacity-70 min-w-64 whitespace-pre-wrap break-words" x-text="e.message"></td>
+                      <td class="whitespace-nowrap opacity-50" x-text="e.last_timestamp"></td>
+                    </tr>
+                  </template>
+                  <tr x-show="events.length === 0"><td colspan="7" class="text-center opacity-40">暂无 events</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div x-show="eventTotalPages > 1" class="flex items-center justify-between mt-4 text-xs opacity-50">
+          <span>共 <span x-text="events.length"></span> 条事件</span>
+          <div class="join">
+            <button class="join-item btn btn-ghost btn-xs h-8 min-h-0 px-3" :disabled="eventPage <= 1" @click="eventPage--"><i class="fas fa-chevron-left text-[10px]"></i></button>
+            <button class="join-item btn btn-ghost btn-xs h-8 min-h-0 px-3 no-animation" x-text="eventPage + ' / ' + eventTotalPages"></button>
+            <button class="join-item btn btn-ghost btn-xs h-8 min-h-0 px-3" :disabled="eventPage >= eventTotalPages" @click="eventPage++"><i class="fas fa-chevron-right text-[10px]"></i></button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: 关联 Pods -->
+      <div x-show="!loading && !error && tab === 'pods'" x-cloak>
+        <div class="card bg-base-200 shadow">
+          <div class="card-body p-5 gap-4">
+            <div class="overflow-x-auto">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>名称</th>
+                    <th>状态</th>
+                    <th>就绪</th>
+                    <th class="text-center">重启</th>
+                    <th>Age</th>
+                    <th>节点</th>
+                    <th>IP</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template x-for="p in pagedPods" :key="p.name">
+                    <tr>
+                      <td class="font-mono" x-text="p.name"></td>
+                      <td>
+                        <div class="flex flex-col gap-1">
+                          <span class="badge badge-sm"
+                                :class="p.status_phase === 'Running' ? 'badge-success' : p.status_phase === 'Pending' ? 'badge-warning' : p.status_phase === 'Succeeded' ? 'badge-info' : 'badge-error'"
+                                x-text="p.status_phase"></span>
+                          <template x-if="p.status_reason">
+                            <span class="badge badge-xs badge-error badge-outline cursor-help"
+                                  :title="p.status_message || p.status_reason">
+                              <i class="fas fa-exclamation-circle text-[8px] mr-1"></i>
+                              <span x-text="p.status_reason"></span>
+                            </span>
+                          </template>
+                        </div>
+                      </td>
+                      <td class="opacity-70" x-text="p.ready_str"></td>
+                      <td class="text-center opacity-70" x-text="p.restarts"></td>
+                      <td class="font-semibold whitespace-nowrap text-primary" x-text="p.age" :title="p.created"></td>
+                      <td class="opacity-50" x-text="p.node"></td>
+                      <td class="font-mono opacity-50" x-text="p.ip"></td>
+                      <td>
+                        <div class="flex gap-1">
+                          <button class="btn btn-ghost btn-xs gap-1"
+                                  @click="$dispatch('open-pod-logs', {namespace: p.namespace, podName: p.name, logsUrl: clusterPodLogsUrl(p.namespace, p.name)})">
+                            <i class="fas fa-terminal text-[9px]"></i> 日志
+                          </button>
+                          <button class="btn btn-ghost btn-xs gap-1"
+                                  @click="openYaml('Pod: ' + p.name, '/resources/' + clusterPk + '/yaml/pod/' + p.namespace + '/' + p.name + '/', false)">
+                            <i class="fas fa-file-code text-[9px]"></i> YAML
+                          </button>
+                          <template x-if="p.status_phase !== 'Running' && p.status_phase !== 'Succeeded'">
+                            <button class="btn btn-ghost btn-xs gap-1 text-error"
+                                    @click="$dispatch('open-delete-modal', {type: 'Pod', name: p.name, namespace: p.namespace, deleteUrl: '/resources/' + clusterPk + '/delete/pod/' + p.namespace + '/' + p.name + '/'})">
+                              <i class="fas fa-trash-alt text-[9px]"></i> 删除
+                            </button>
+                          </template>
+                        </div>
+                      </td>
+                    </tr>
+                  </template>
+                  <tr x-show="pods.length === 0"><td colspan="8" class="text-center opacity-40">无关联 Pod</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div x-show="podTotalPages > 1" class="flex items-center justify-between mt-4 text-xs opacity-50">
+          <span>共 <span x-text="pods.length"></span> 个 Pod</span>
+          <div class="join">
+            <button class="join-item btn btn-ghost btn-xs h-8 min-h-0 px-3" :disabled="podPage <= 1" @click="podPage--"><i class="fas fa-chevron-left text-[10px]"></i></button>
+            <button class="join-item btn btn-ghost btn-xs h-8 min-h-0 px-3 no-animation" x-text="podPage + ' / ' + podTotalPages"></button>
+            <button class="join-item btn btn-ghost btn-xs h-8 min-h-0 px-3" :disabled="podPage >= podTotalPages" @click="podPage++"><i class="fas fa-chevron-right text-[10px]"></i></button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- Workload Rollback Modal (Deployment/StatefulSet/DaemonSet) -->
+<dialog id="rollbackModal" class="modal" x-data="rollbackViewer()" @open-deployment-rollback.window="open($event.detail, 'deployment')" @open-statefulset-rollback.window="open($event.detail, 'statefulset')" @open-daemonset-rollback.window="open($event.detail, 'daemonset')">
+  <div class="modal-box bg-base-100 border border-warning/30 rounded-2xl shadow-2xl" style="width: 70vw; max-width: 900px;">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-10 h-10 rounded-xl bg-warning/15 grid place-items-center">
+        <i class="fas fa-undo text-warning"></i>
+      </div>
+      <div>
+        <h3 class="font-bold text-sm" x-text="'回滚 ' + resourceTypeLabel"></h3>
+        <p class="text-[11px] opacity-50" x-text="(meta.namespace || '') + ' / ' + (meta.name || '')"></p>
+      </div>
+    </div>
+
+    <div class="alert text-[11px] mb-3" style="background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.3);">
+      <i class="fas fa-info-circle text-warning"></i>
+      <span>选择一个历史版本回滚。回滚会用该历史版本的 pod template 覆盖当前配置，触发滚动更新。</span>
+    </div>
+
+    <div x-show="loading" class="flex items-center justify-center py-10 opacity-50 gap-2">
+      <span class="loading loading-spinner loading-sm"></span> 加载历史中...
+    </div>
+    <div x-show="!loading && error" class="alert alert-error text-xs"><i class="fas fa-exclamation-triangle"></i><span x-text="error"></span></div>
+
+    <table x-show="!loading && !error" class="table table-xs">
+      <thead><tr class="border-b border-base-300/50">
+        <th class="text-[10px]">Revision</th><th class="text-[10px]">镜像</th><th class="text-[10px]">变更原因</th><th class="text-[10px]">创建时间</th><th class="text-[10px]">操作</th>
+      </tr></thead>
+      <tbody>
+        <template x-for="r in pagedRevisions" :key="r.revision">
+          <tr class="border-b border-base-300/30" :class="r.is_current ? 'bg-violet-500/5' : ''">
+            <td class="font-bold">
+              <span x-text="'#' + r.revision"></span>
+              <span x-show="r.is_current" class="badge badge-xs badge-primary ml-1">当前</span>
+            </td>
+            <td class="font-mono opacity-80 break-all" x-text="(r.images || []).join(', ') || '-'"></td>
+            <td class="opacity-70" x-text="r.change_cause || '-'"></td>
+            <td class="opacity-50 whitespace-nowrap" x-text="r.created"></td>
+            <td>
+              <button class="btn btn-warning btn-xs h-6 min-h-0 gap-1 text-[10px] whitespace-nowrap"
+                      :disabled="r.is_current || rolling || pendingRevision"
+                      @click="pendingRevision = r.revision">
+                <i class="fas fa-undo text-[9px]"></i> 回滚到此
+              </button>
+            </td>
+          </tr>
+        </template>
+        <tr x-show="revisions.length === 0"><td colspan="5" class="text-center opacity-40 py-6">无历史版本</td></tr>
+      </tbody>
+    </table>
+    <div x-show="totalPages > 1" class="flex items-center justify-between mt-3 text-[10px] opacity-60">
+      <span>共 <span x-text="revisions.length"></span> 个版本</span>
+      <div class="join">
+        <button class="join-item btn btn-xs h-7 min-h-0" :disabled="page <= 1" @click="page--">«</button>
+        <button class="join-item btn btn-xs h-7 min-h-0 no-animation" x-text="page + ' / ' + totalPages"></button>
+        <button class="join-item btn btn-xs h-7 min-h-0" :disabled="page >= totalPages" @click="page++">»</button>
+      </div>
+    </div>
+
+    <!-- 内联确认条：点击"回滚到此"后展开 -->
+    <div x-show="pendingRevision" x-cloak class="mt-4 rounded-lg p-3 flex items-center justify-between gap-3"
+         style="background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.35);">
+      <div class="flex items-center gap-2 text-xs">
+        <i class="fas fa-exclamation-triangle text-warning"></i>
+        <span>确认回滚到 <span class="font-bold" x-text="'revision #' + pendingRevision"></span> ？此操作会立即触发滚动更新。</span>
+      </div>
+      <div class="flex gap-2">
+        <button class="btn btn-ghost btn-xs h-8 min-h-0 px-4 text-[11px]" :disabled="rolling"
+                @click="pendingRevision = null">取消</button>
+        <button class="btn btn-warning btn-xs gap-1.5 h-8 min-h-0 px-4 text-[11px]" :disabled="rolling"
+                @click="doRollback()">
+          <i class="fas fa-undo text-[9px]" :class="rolling ? 'animate-spin' : ''"></i>
+          <span x-text="rolling ? '回滚中...' : '确认回滚'"></span>
+        </button>
+      </div>
+    </div>
+
+    <div class="modal-action mt-4">
+      <button class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs" onclick="rollbackModal.close()">关闭</button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
+<!-- Pod Logs Modal（共享：pod 列表、deployment describe 都用） -->
+<dialog id="logModal" class="modal" x-data="podLogViewer()"
+        @open-pod-logs.window="viewLogs($event.detail.namespace, $event.detail.podName, $event.detail.logsUrl)">
+  <div class="modal-box bg-base-100 border border-base-300 shadow-2xl flex flex-col p-0" style="max-width: 1000px; height:65vh; border-radius: 20px;">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-base-300 flex-shrink-0 bg-base-200/50">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl grid place-items-center shadow-lg bg-primary/20">
+          <i class="fas fa-terminal text-sm text-primary"></i>
+        </div>
+        <div>
+          <span class="font-semibold text-base text-base-content">Pod 日志</span>
+          <div class="text-xs mt-0.5 opacity-60" x-text="namespace + ' / ' + podName"></div>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-sm btn-circle h-9 w-9 min-h-0" @click="stopLive(); $el.closest('dialog').close()">
+        <i class="fas fa-times text-sm"></i>
+      </button>
+    </div>
+
+    <div class="flex items-center justify-between px-6 py-3 border-b border-base-300 flex-shrink-0 bg-base-200/30">
+      <div class="flex items-center gap-3">
+        <span class="text-[11px] px-2.5 py-1 rounded-lg font-medium bg-primary/15 text-primary" x-text="container || 'default'"></span>
+        <select x-model="tailLines" @change="viewLogs(namespace, podName, baseUrl, false, true)"
+                class="select select-bordered select-sm h-8 min-h-0 text-xs rounded-lg w-[140px]">
+          <option value="100">最近 100 行</option>
+          <option value="200">最近 200 行</option>
+          <option value="500">最近 500 行</option>
+          <option value="1000">最近 1000 行</option>
+        </select>
+        <label class="flex items-center gap-2 cursor-pointer select-none">
+          <input type="checkbox" class="toggle toggle-sm toggle-primary" :checked="liveMode" @change="toggleLive()">
+          <span class="text-xs font-medium" :class="liveMode ? 'text-success' : 'opacity-50'">实时</span>
+        </label>
+      </div>
+      <div class="flex items-center gap-2">
+        <button @click="viewLogs(namespace, podName, baseUrl, false, true)"
+                class="btn btn-ghost btn-sm h-8 min-h-0 gap-1.5 text-xs rounded-lg">
+          <i class="fas fa-sync-alt text-[10px]" :class="loading ? 'animate-spin' : ''"></i> 刷新
+        </button>
+        <button @click="if(liveMode) stopLive(); previous = !previous; viewLogs(namespace, podName, baseUrl, false, true)"
+                class="btn btn-sm h-8 min-h-0 gap-1.5 text-xs rounded-lg transition-all"
+                :class="previous ? 'btn-outline hover:bg-warning hover:text-warning-content hover:border-warning' : 'btn-ghost'">
+          <i class="fas fa-history text-[10px]"></i> 上次日志
+        </button>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto px-5 py-4 font-mono text-xs leading-relaxed bg-neutral text-neutral-content" x-ref="logBox">
+      <div x-show="loading && !logs" class="flex flex-col items-center justify-center h-full gap-3">
+        <span class="loading loading-spinner loading-md text-primary"></span>
+        <span class="text-xs opacity-50">获取日志中...</span>
+      </div>
+      <div x-show="!loading && error" class="text-xs text-error" x-text="error"></div>
+      <pre x-show="logs" class="whitespace-pre-wrap break-all m-0" x-text="logs"></pre>
+      <div x-show="!loading && !error && !logs" class="flex flex-col items-center justify-center h-full gap-3 opacity-40">
+        <i class="fas fa-file-alt text-3xl"></i>
+        <span class="text-xs">暂无日志输出</span>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between px-5 py-2.5 border-t border-base-300 text-[11px] flex-shrink-0 bg-base-200/30 opacity-60">
+      <span x-text="namespace + ' / ' + podName"></span>
+      <div class="flex items-center gap-4">
+        <span x-show="liveMode" class="flex items-center gap-1.5 text-success">
+          <span class="w-1.5 h-1.5 rounded-full animate-pulse bg-success"></span> 每 3s 刷新
+        </span>
+        <span x-text="logs ? (logs.split('\n').length + ' 行') : ''"></span>
+      </div>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop" @click="stopLive()"><button>close</button></form>
+</dialog>
+
+{{/*
+Pod 终端（exec）。故意不放 .modal-backdrop：终端里随手点一下就关掉、
+把没保存的命令和会话一起丢了，代价太大。只能靠右上角关闭按钮退出。
+*/}}
+<dialog id="execModal" class="modal" x-data="podExecTerminal()"
+        @open-pod-exec.window="open($event.detail)"
+        @close="teardown()">
+  <div class="modal-box bg-base-100 border border-base-300 shadow-2xl flex flex-col p-0"
+       style="max-width: 1100px; height: 72vh; border-radius: 20px;">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-base-300 flex-shrink-0 bg-base-200/50">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl grid place-items-center shadow-lg bg-success/20">
+          <i class="fas fa-terminal text-sm text-success"></i>
+        </div>
+        <div>
+          <span class="font-semibold text-base text-base-content">容器终端</span>
+          <div class="text-xs mt-0.5 opacity-60">
+            <span x-text="namespace + ' / ' + podName"></span>
+            <span x-show="container" class="ml-1.5 px-1.5 py-0.5 rounded bg-success/15 text-success"
+                  x-text="container"></span>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg"
+              :class="connected ? 'bg-success/15 text-success' : 'bg-base-content/10 opacity-60'">
+          <span class="w-1.5 h-1.5 rounded-full" :class="connected ? 'bg-success animate-pulse' : 'bg-base-content/40'"></span>
+          <span x-text="connected ? '已连接' : '已断开'"></span>
+        </span>
+        <button class="btn btn-ghost btn-sm btn-circle h-9 w-9 min-h-0" title="关闭终端"
+                @click="$el.closest('dialog').close()">
+          <i class="fas fa-times text-sm"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="flex-1 min-h-0 relative bg-[#0b0f14]">
+      <div x-show="starting" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#0b0f14]">
+        <span class="loading loading-spinner loading-md text-success"></span>
+        <span class="text-xs opacity-50 text-neutral-content">正在进入容器...</span>
+      </div>
+      <div x-show="error" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 px-8 text-center bg-[#0b0f14]">
+        <i class="fas fa-triangle-exclamation text-2xl text-error"></i>
+        <span class="text-xs text-error break-all" x-text="error"></span>
+      </div>
+      <div x-ref="term" class="absolute inset-0 px-3 py-2"></div>
+    </div>
+
+    <div class="flex items-center justify-between px-5 py-2.5 border-t border-base-300 text-[11px] flex-shrink-0 bg-base-200/30 opacity-60">
+      <span x-text="namespace + ' / ' + podName"></span>
+      <span>输入 exit 或点右上角关闭退出</span>
+    </div>
+  </div>
+</dialog>
+
+<!-- CSRF Token -->
+
+{{/*
+Monaco 改为本地 vendor（static/js/monaco/vs），不再走 CDN。
+原因：jsdelivr 的 loader.js 能拿到，但真正的 editor.main.js 有 947KB，
+实测在浏览器里 30 秒都下不完 → YAML 弹窗永远停在空白，编辑器根本没实例化。
+只搬 YAML 编辑用得到的部分（editor + base + yaml 语言包，去掉多余语言包和
+非中英文 nls），约 4MB。与 gsap/echarts/xterm 一致：前端依赖不赌 CDN 可用性。
+*/}}
+<script src="/static/js/monaco/vs/loader.js"></script>
+<script>
+let monacoEditor = null;
+let currentYamlUrl = '';
+let yamlMode = 'edit';   // 'edit' = 编辑现有资源；'create' = 新建（POST 到 apply API）；'readonly' = 仅查看
+
+// Monaco 主题跟随应用主题（base.html 写在 <html> 上的 data-theme）：
+// 亮色用 vs、暗色用 vs-dark，否则亮色主题下弹窗白底配一块黑编辑器很突兀。
+function monacoTheme() {
+  return document.documentElement.getAttribute('data-theme') === 'light' ? 'vs' : 'vs-dark';
+}
+// 弹窗开着时切主题也能即时跟随（观察 data-theme 变化即可，与切换方式无关）
+new MutationObserver(function () {
+  if (window.monaco && monacoEditor) monaco.editor.setTheme(monacoTheme());
+}).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+// 统一切换 yaml modal 顶部提示条；mode ∈ 'edit' | 'create' | 'readonly'
+function _setYamlTip(mode) {
+  const ids = {edit: 'yamlEditTip', create: 'yamlCreateTip', readonly: 'yamlReadonlyTip'};
+  Object.values(ids).forEach(id => document.getElementById(id).classList.add('hidden'));
+  const target = ids[mode] || ids.edit;
+  document.getElementById(target).classList.remove('hidden');
+}
+
+require.config({ paths: { vs: '/static/js/monaco/vs'.replace(/\/$/, '') }});
+
+// 各资源类型的默认 YAML 模板（用于"新建"按钮）
+const RESOURCE_YAML_TEMPLATES = {
+  deployment: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: example-deployment
+  namespace: default
+  labels:
+    app: example
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: example
+  template:
+    metadata:
+      labels:
+        app: example
+    spec:
+      containers:
+        - name: main
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+`,
+  statefulset: `apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: example-sts
+  namespace: default
+spec:
+  serviceName: example
+  replicas: 1
+  selector:
+    matchLabels:
+      app: example
+  template:
+    metadata:
+      labels:
+        app: example
+    spec:
+      containers:
+        - name: main
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+`,
+  daemonset: `apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: example-ds
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: example
+  template:
+    metadata:
+      labels:
+        app: example
+    spec:
+      containers:
+        - name: main
+          image: nginx:latest
+`,
+  job: `apiVersion: batch/v1
+kind: Job
+metadata:
+  name: example-job
+  namespace: default
+spec:
+  completions: 1
+  parallelism: 1
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        app: example-job
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: worker
+          image: busybox:1.36
+          command: ["sh", "-c", "echo hello && sleep 10"]
+`,
+  cronjob: `apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: example-cronjob
+  namespace: default
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 4
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: task
+              image: busybox:1.36
+              command: ["sh", "-c", "date; echo done"]
+`,
+  hpa: `apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: example-hpa
+  namespace: default
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: example-deployment
+  minReplicas: 1
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 80
+`,
+  scaledobject: `apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: example-scaledobject
+  namespace: default
+spec:
+  scaleTargetRef:
+    name: example-deployment
+  minReplicaCount: 1
+  maxReplicaCount: 10
+  triggers:
+    - type: cpu
+      metadata:
+        type: Utilization
+        value: "70"
+`,
+  scaledjob: `apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: example-scaledjob
+  namespace: default
+spec:
+  maxReplicaCount: 5
+  pollingInterval: 30
+  triggers:
+    - type: cron
+      metadata:
+        timezone: Asia/Shanghai
+        start: "0 9 * * *"
+        end: "0 18 * * *"
+        desiredReplicas: "1"
+  jobTargetRef:
+    template:
+      spec:
+        restartPolicy: Never
+        containers:
+          - name: task
+            image: busybox:1.36
+            command: ["sh", "-c", "echo run once"]
+`,
+  pod: `apiVersion: v1
+kind: Pod
+metadata:
+  name: example-pod
+  namespace: default
+  labels:
+    app: example
+spec:
+  containers:
+    - name: main
+      image: nginx:latest
+      ports:
+        - containerPort: 80
+`,
+  service: `apiVersion: v1
+kind: Service
+metadata:
+  name: example-service
+  namespace: default
+spec:
+  selector:
+    app: example
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: ClusterIP
+`,
+  ingress: `apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: example-ingress
+  namespace: default
+spec:
+  rules:
+    - host: example.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: example-service
+                port:
+                  number: 80
+`,
+  configmap: `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: example-config
+  namespace: default
+data:
+  key1: value1
+  key2: value2
+`,
+  secret: `apiVersion: v1
+kind: Secret
+metadata:
+  name: example-secret
+  namespace: default
+type: Opaque
+stringData:
+  username: admin
+  password: changeme
+`,
+  pvc: `apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: example-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+`,
+};
+
+const RESOURCE_KIND_DISPLAY = {
+  deployment: 'Deployment', statefulset: 'StatefulSet', daemonset: 'DaemonSet',
+  pod: 'Pod', service: 'Service', ingress: 'Ingress',
+  configmap: 'ConfigMap', secret: 'Secret', pvc: 'PersistentVolumeClaim',
+};
+
+// 通过 YAML 创建资源（kind 决定填充哪个模板，url 是通用 apply API）
+function openYamlCreate(kind, applyUrl) {
+  const tmpl = RESOURCE_YAML_TEMPLATES[kind];
+  if (!tmpl) {
+    if (typeof showToast === 'function') showToast('该资源类型暂无 YAML 模板：' + kind, 'error');
+    return;
+  }
+  currentYamlUrl = applyUrl;
+  yamlMode = 'create';
+  document.getElementById('yamlModalTitle').textContent = '新建 ' + (RESOURCE_KIND_DISPLAY[kind] || kind);
+  document.getElementById('yamlModalPath').textContent = '通过 YAML 创建资源';
+  document.getElementById('yamlError').classList.add('hidden');
+  document.getElementById('yamlSuccess').classList.add('hidden');
+  document.getElementById('yamlStatus').textContent = '就绪';
+
+  const toggle = document.getElementById('yamlReadonlyToggle');
+  toggle.parentElement.style.display = 'none';   // 创建模式下不显示"编辑模式"开关
+  toggle.checked = true;
+  document.getElementById('yamlApplyBtn').style.display = '';
+  document.getElementById('yamlValidateBtn').style.display = '';
+  // 创建模式下应用按钮文案
+  const applyBtn = document.getElementById('yamlApplyBtn');
+  applyBtn.innerHTML = '<i class="fas fa-cloud-upload-alt mr-1.5 text-[10px]"></i> 创建';
+  _setYamlTip('create');
+
+  if (yamlModal.open) yamlModal.close();
+  yamlModal.showModal();
+
+  if (monacoEditor) {
+    monacoEditor.setValue(tmpl);
+    monacoEditor.updateOptions({ readOnly: false });
+    monaco.editor.setTheme(monacoTheme());
+    setTimeout(() => monacoEditor.layout(), 50);
+  } else {
+    require(['vs/editor/editor.main'], function() {
+      monacoEditor = monaco.editor.create(document.getElementById('monacoContainer'), {
+        value: tmpl, language: 'yaml', theme: monacoTheme(), readOnly: false,
+        minimap: { enabled: true, maxColumn: 80 },
+        fontSize: 13, lineNumbers: 'on', scrollBeyondLastLine: false,
+        automaticLayout: true, padding: { top: 10, bottom: 10 },
+        renderLineHighlight: 'all', smoothScrolling: true,
+        cursorBlinking: 'smooth', folding: true,
+        bracketPairColorization: { enabled: true },
+      });
+      setTimeout(() => monacoEditor.layout(), 100);
+    });
+  }
+}
+
+function openYaml(title, url, canEdit) {
+  if (canEdit === undefined) canEdit = true;
+  currentYamlUrl = url;
+  document.getElementById('yamlModalTitle').textContent = title;
+  document.getElementById('yamlModalPath').textContent = url.replace(/.*\/yaml\//, '').replace(/\/$/, '').replace(/\//g, ' / ');
+  document.getElementById('yamlError').classList.add('hidden');
+  document.getElementById('yamlSuccess').classList.add('hidden');
+  document.getElementById('yamlStatus').textContent = '加载中...';
+
+  const toggle = document.getElementById('yamlReadonlyToggle');
+  const applyBtn = document.getElementById('yamlApplyBtn');
+  const validateBtn = document.getElementById('yamlValidateBtn');
+  // 重置按钮文案为"应用到集群"（防止上次进入是"+ 新建"残留下来的"创建"文案）
+  applyBtn.innerHTML = '<i class="fas fa-cloud-upload-alt mr-1.5 text-[10px]"></i> 应用到集群';
+  // 用户反馈：默认进 yaml 弹窗应当是只读预览，避免误改；按右上角"编辑模式"
+  // 开关后再进入可编辑状态。canEdit=false 的资源（如 pod）则强制只读到底，
+  // 此时连开关都不展示。
+  yamlMode = canEdit ? 'edit' : 'readonly';
+  if (canEdit) {
+    toggle.parentElement.style.display = '';
+    // 开关默认关，应用/验证按钮先隐藏；用户切换后再展示
+    toggle.checked = false;
+    applyBtn.style.display = 'none';
+    validateBtn.style.display = 'none';
+  } else {
+    toggle.parentElement.style.display = 'none';
+    applyBtn.style.display = 'none';
+    validateBtn.style.display = 'none';
+    toggle.checked = false;
+  }
+  _setYamlTip(yamlMode);
+
+  yamlModal.showModal();
+
+  fetch(url)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        document.getElementById('yamlStatus').textContent = '加载失败';
+        document.getElementById('yamlError').classList.remove('hidden');
+        document.getElementById('yamlErrorText').textContent = data.error;
+        return;
+      }
+      const container = document.getElementById('monacoContainer');
+      // 默认按 toggle.checked（已被 openYaml 重置为 false 即只读）
+      const readOnly = !toggle.checked;
+      if (monacoEditor) {
+        monacoEditor.setValue(data.yaml);
+        monacoEditor.updateOptions({ readOnly: readOnly });
+        monaco.editor.setTheme(monacoTheme());
+        setTimeout(() => monacoEditor.layout(), 50);
+      } else {
+        require(['vs/editor/editor.main'], function() {
+          monacoEditor = monaco.editor.create(container, {
+            value: data.yaml,
+            language: 'yaml',
+            theme: monacoTheme(),
+            readOnly: readOnly,
+            minimap: { enabled: true, maxColumn: 80 },
+            fontSize: 13,
+            lineNumbers: 'on',
+            scrollBeyondLastLine: false,
+            automaticLayout: true,
+            padding: { top: 10, bottom: 10 },
+            renderLineHighlight: 'all',
+            smoothScrolling: true,
+            cursorBlinking: 'smooth',
+            folding: true,
+            bracketPairColorization: { enabled: true },
+          });
+          setTimeout(() => monacoEditor.layout(), 100);
+        });
+      }
+      document.getElementById('yamlStatus').textContent = '就绪';
+    })
+    .catch(e => {
+      document.getElementById('yamlStatus').textContent = '加载失败';
+      document.getElementById('yamlError').classList.remove('hidden');
+      document.getElementById('yamlErrorText').textContent = '网络请求失败: ' + e.message;
+    });
+}
+
+// 编辑模式开关：用户切换时同时控制 monaco readOnly、应用/验证按钮的可见性，
+// 以及顶部提示条文案，确保整个弹窗状态一致。
+// canEdit=false 的资源（如 pod）下 toggle 是隐藏的，不会触发到这里。
+document.getElementById('yamlReadonlyToggle').addEventListener('change', function() {
+  const editing = this.checked;
+  if (monacoEditor) monacoEditor.updateOptions({ readOnly: !editing });
+  const applyBtn = document.getElementById('yamlApplyBtn');
+  const validateBtn = document.getElementById('yamlValidateBtn');
+  applyBtn.style.display = editing ? '' : 'none';
+  validateBtn.style.display = editing ? '' : 'none';
+  // 仅在 edit / readonly 之间切，create 模式不会到这里（toggle 在 openYamlCreate 里隐藏）
+  yamlMode = editing ? 'edit' : 'readonly';
+  _setYamlTip(yamlMode);
+});
+
+function validateYaml() {
+  if (!monacoEditor) return;
+  const yamlText = monacoEditor.getValue();
+  const errBox = document.getElementById('yamlError');
+  const okBox = document.getElementById('yamlSuccess');
+  const errText = document.getElementById('yamlErrorText');
+  const okText = document.getElementById('yamlSuccessText');
+  const status = document.getElementById('yamlStatus');
+  errBox.classList.add('hidden');
+  okBox.classList.add('hidden');
+
+  // 1) 客户端兜底：YAML 解析最基本的 Tab 缩进检查
+  const lines = yamlText.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim() === '' || line.trim().startsWith('#')) continue;
+    if (line.includes('\t')) {
+      errBox.classList.remove('hidden');
+      errText.textContent = `第 ${i+1} 行: YAML 不允许使用 Tab 缩进，请使用空格`;
+      status.textContent = '验证失败';
+      return;
+    }
+  }
+
+  // 2) 走后端 server-side dry-run：用真实集群跑一遍 K8s schema/admission 校验
+  // 比手写规则准 100 倍，且每升 K8s 自动获得新校验能力
+  const m = (currentYamlUrl || '').match(/^\/resources\/(\d+)\//);
+  if (!m) {
+    errBox.classList.remove('hidden');
+    errText.textContent = '无法识别集群，请重新打开 YAML';
+    status.textContent = '验证失败';
+    return;
+  }
+  const validateUrl = `/resources/${m[1]}/validate/`;
+  status.textContent = '校验中...';
+  fetch(validateUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({yaml: yamlText}),
+  })
+    .then(r => r.json())
+    .then(data => {
+      const errs = data.errors || [];
+      const warns = data.warnings || [];
+
+      if (errs.length > 0) {
+        const msg = errs.map(e => `[${e.kind}/${e.name}] ${e.message}`).join('\n\n');
+        errBox.classList.remove('hidden');
+        errText.style.whiteSpace = 'pre-wrap';
+        errText.textContent = msg;
+        status.textContent = '校验未通过';
+        return;
+      }
+
+      // 没有 error，根据 warning 情况展示
+      okBox.classList.remove('hidden');
+      okText.style.whiteSpace = 'pre-wrap';
+      let okMsg = `校验通过：${data.docs} 个资源对象 K8s 服务端 dry-run 全部接受`;
+      if (warns.length > 0) {
+        const lines = warns.map(w => `⚠ [${w.kind}/${w.name}] ${w.field} —— ${w.reason}`);
+        okMsg += '\n\n以下字段会被服务端忽略，写了也不会生效：\n' + lines.join('\n');
+        status.textContent = '校验通过（含警告）';
+      } else {
+        status.textContent = '校验通过';
+      }
+      okText.textContent = okMsg;
+    })
+    .catch(e => {
+      errBox.classList.remove('hidden');
+      errText.textContent = '校验请求失败：' + e.message;
+      status.textContent = '校验失败';
+    });
+}
+
+function applyYaml() {
+  if (!monacoEditor || !currentYamlUrl) return;
+  const yaml = monacoEditor.getValue();
+  document.getElementById('yamlStatus').textContent = '正在应用...';
+  document.getElementById('yamlError').classList.add('hidden');
+  document.getElementById('yamlSuccess').classList.add('hidden');
+  document.getElementById('yamlApplyBtn').classList.add('loading');
+
+  // 编辑现有资源时也统一走通用 apply API（按 YAML 文档自身解析 kind/name/namespace，
+  // 内部做 create-or-replace + 乐观锁，行为与按 URL 应用完全一致）
+  const clusterMatch = (currentYamlUrl || '').match(/^\/resources\/(\d+)\//);
+  const postUrl = yamlMode === 'create' ? currentYamlUrl : (clusterMatch ? `/resources/${clusterMatch[1]}/apply/` : currentYamlUrl);
+
+  fetch(postUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ yaml: yaml })
+  })
+  .then(r => r.json())
+  .then(data => {
+    document.getElementById('yamlApplyBtn').classList.remove('loading');
+    if (data.success) {
+      // 后端可能附带 warnings（如 status 字段被剥）；有的话用 toast 单独高亮，
+      // 不淹没在 success 文案里
+      const warns = data.warnings || [];
+      let successMsg = data.message || '资源配置已成功应用到集群';
+      if (warns.length > 0) {
+        successMsg += '\n⚠ ' + warns.join('；');
+        if (typeof showToast === 'function') {
+          warns.forEach(w => showToast(w, 'warning'));
+        }
+      }
+      document.getElementById('yamlSuccess').classList.remove('hidden');
+      document.getElementById('yamlSuccessText').textContent = successMsg;
+      document.getElementById('yamlStatus').textContent = warns.length ? '应用成功（含警告）' : '应用成功';
+
+      // 根据后端返回的 actions 触发列表的乐观更新
+      // - created：派发 create + resource，让列表 markAdded 立即插入
+      // - updated：派发 update + resource，让列表 markUpdated 用真实值刷新对应行
+      //   （避免改 deployment.replicas 等场景列表显示 cache 老数据）
+      const actions = data.actions || [];
+      if (actions.length === 0) {
+        window.dispatchEvent(new CustomEvent('resource-updated', {detail: {}}));
+      } else {
+        actions.forEach(a => {
+          if (a.action === 'created' && a.resource) {
+            window.dispatchEvent(new CustomEvent('resource-updated', {
+              detail: {action: 'create', resource: a.resource}
+            }));
+          } else if (a.action === 'updated' && a.resource) {
+            window.dispatchEvent(new CustomEvent('resource-updated', {
+              detail: {action: 'update', resource: a.resource}
+            }));
+          } else {
+            window.dispatchEvent(new CustomEvent('resource-updated', {detail: {}}));
+          }
+        });
+      }
+
+      if (typeof showToast === 'function') showToast(data.message || '已应用', 'success');
+      // 立刻关闭 YAML 弹窗，体验更顺畅；若需要让用户看到成功提示可缩短延迟
+      setTimeout(() => yamlModal.close(), 600);
+    } else {
+      document.getElementById('yamlError').classList.remove('hidden');
+      document.getElementById('yamlErrorText').textContent = data.error;
+      document.getElementById('yamlStatus').textContent = '应用失败';
+    }
+  })
+  .catch(e => {
+    document.getElementById('yamlApplyBtn').classList.remove('loading');
+    document.getElementById('yamlError').classList.remove('hidden');
+    document.getElementById('yamlErrorText').textContent = '请求失败: ' + e.message;
+    document.getElementById('yamlStatus').textContent = '应用失败';
+  });
+}
+
+// Pod 日志查看器（共享在 resource_modals，pod 列表与 deployment describe 都通过
+// open-pod-logs 事件触发；事件 detail.logsUrl 提供具体 cluster 的日志 URL）
+function podLogViewer() {
+  return {
+    podName: '', namespace: '', container: '', baseUrl: '',
+    logs: '', loading: false, error: null,
+    liveMode: false, liveTimer: null, tailLines: '200', previous: false,
+    viewLogs(namespace, podName, logsUrl, isAutoRefresh = false, skipReset = false) {
+      this.podName = podName;
+      this.namespace = namespace;
+      if (logsUrl) this.baseUrl = logsUrl;
+      if (!this.baseUrl) {
+        this.error = '缺少日志 URL';
+        return;
+      }
+      if (!isAutoRefresh && !skipReset) {
+        this.previous = false;
+        this.loading = true;
+        this.error = null;
+        this.logs = '';
+        document.getElementById('logModal').showModal();
+      } else if (!isAutoRefresh) {
+        this.loading = true;
+        this.error = null;
+      }
+
+      const sep = this.baseUrl.includes('?') ? '&' : '?';
+      const url = `${this.baseUrl}${sep}tail_lines=${this.tailLines}${this.previous ? '&previous=true' : ''}`;
+      fetch(url)
+        .then(r => r.json())
+        .then(data => {
+          this.loading = false;
+          if (data.success) {
+            if (data.no_previous) {
+              this.logs = '';
+              this.error = '该容器没有上次日志（容器未重启过）';
+            } else {
+              this.logs = data.logs || '';
+              this.error = null;
+            }
+            this.container = data.container || 'default';
+            this.$nextTick(() => {
+              if (this.$refs.logBox) this.$refs.logBox.scrollTop = this.$refs.logBox.scrollHeight;
+            });
+          } else {
+            this.error = data.error || '获取日志失败';
+            if (this.liveMode) this.stopLive();
+          }
+        })
+        .catch(err => {
+          this.loading = false;
+          this.error = err.message;
+          if (this.liveMode) this.stopLive();
+        });
+    },
+    toggleLive() {
+      this.liveMode = !this.liveMode;
+      if (this.liveMode) {
+        this.previous = false;
+        this.viewLogs(this.namespace, this.podName, this.baseUrl, false, true);
+        this.liveTimer = setInterval(() => {
+          this.viewLogs(this.namespace, this.podName, this.baseUrl, true);
+        }, 3000);
+      } else {
+        this.stopLive();
+      }
+    },
+    stopLive() {
+      this.liveMode = false;
+      if (this.liveTimer) { clearInterval(this.liveTimer); this.liveTimer = null; }
+    }
+  };
+}
+
+// Pod 容器终端（exec）。由 open-pod-exec 事件触发，detail 带 execBase（不含动作段）。
+//
+// 桌面版升级为真实 WebSocket 直通：open 接口建立 Go 侧到 K8s 的 exec 流并返回
+// 一次性 token，xterm.js 直连本地网关（127.0.0.1 随机端口），二进制帧走键盘
+// 输入/容器输出，文本帧走 resize/exit 控制消息 —— 没有 Django 版轮询方案的延迟。
+function podExecTerminal() {
+  return {
+    podName: '', namespace: '', container: '', execBase: '',
+    session: '', connected: false, starting: false, error: null,
+    _term: null, _fit: null, _ws: null, _onResize: null,
+
+    _post(action, body) {
+      const form = new URLSearchParams(body || {});
+      return fetch(this.execBase + action + '/', {
+        method: 'POST',
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: form.toString(),
+      }).then(r => r.json().then(d => ({ok: r.ok, data: d})));
+    },
+
+    open(detail) {
+      this.podName = detail.podName;
+      this.namespace = detail.namespace;
+      this.execBase = detail.execBase;
+      this.container = detail.container || '';
+      this.session = '';
+      this.error = null;
+      this.connected = false;
+      this.starting = true;
+      document.getElementById('execModal').showModal();
+
+      // xterm 需要容器已经有实际尺寸才能算出行列数，所以等 dialog 布局完成
+      this.$nextTick(() => this._boot());
+    },
+
+    _boot() {
+      if (!window.Terminal) {
+        this.starting = false;
+        this.error = '终端组件未加载（static/js/xterm.js）';
+        return;
+      }
+      const term = new window.Terminal({
+        cursorBlink: true,
+        fontSize: 12.5,
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        scrollback: 5000,
+        theme: {background: '#0b0f14', foreground: '#d6deeb', cursor: '#7fdbca'},
+      });
+      this._term = term;
+      term.open(this.$refs.term);
+
+      if (window.FitAddon) {
+        this._fit = new window.FitAddon.FitAddon();
+        term.loadAddon(this._fit);
+        this._fit.fit();
+      }
+
+      // 本地不回显：让容器里的 shell 自己回显，否则每个字符会出现两次
+      term.onData(d => {
+        if (this._ws && this._ws.readyState === WebSocket.OPEN) this._ws.send(new TextEncoder().encode(d));
+      });
+
+      this._onResize = () => {
+        if (!this._fit || !this._term) return;
+        this._fit.fit();
+        this._sendResize();
+      };
+      window.addEventListener('resize', this._onResize);
+
+      this._post('open', {container: this.container}).then(({ok, data}) => {
+        if (!ok || !data.success) {
+          this.starting = false;
+          this.error = data.error || '无法建立终端会话';
+          return;
+        }
+        this.session = data.session;
+        this.container = data.container || this.container;
+        this._connect(data.ws_url + encodeURIComponent(this.session));
+      }).catch(e => {
+        this.starting = false;
+        this.error = e.message;
+      });
+    },
+
+    _connect(wsUrl) {
+      const ws = new WebSocket(wsUrl);
+      ws.binaryType = 'arraybuffer';
+      this._ws = ws;
+      ws.onopen = () => {
+        this.starting = false;
+        this.connected = true;
+        this._sendResize();
+        this._term.focus();
+      };
+      ws.onmessage = (ev) => {
+        if (ev.data instanceof ArrayBuffer || ev.data instanceof Uint8Array) {
+          this._term.write(ev.data instanceof ArrayBuffer ? new Uint8Array(ev.data) : ev.data);
+          return;
+        }
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type === 'exit') this._finish(msg.err);
+        } catch (e) { /* 忽略无法解析的控制帧 */ }
+      };
+      ws.onerror = () => {
+        if (!this.connected) {
+          this.starting = false;
+          this.error = '无法连接终端网关';
+        }
+      };
+      ws.onclose = () => {
+        this._ws = null;
+        if (this.session) {
+          this.session = '';
+          this.connected = false;
+          if (this._term) this._term.write('\r\n\x1b[33m[会话已结束]\x1b[0m\r\n');
+        }
+      };
+    },
+
+    _sendResize() {
+      if (!this._ws || this._ws.readyState !== WebSocket.OPEN || !this._term) return;
+      this._ws.send(JSON.stringify({type: 'resize', cols: this._term.cols, rows: this._term.rows}));
+    },
+
+    _finish(msg) {
+      this.connected = false;
+      this.session = '';
+      if (this._ws) { try { this._ws.close(); } catch (e) {} this._ws = null; }
+      if (this._term) {
+        this._term.write('\r\n\x1b[33m' + (msg ? msg + ' ' : '') + '[会话已结束]\x1b[0m\r\n');
+      }
+    },
+
+    teardown() {
+      if (this._ws) { try { this._ws.close(); } catch (e) {} this._ws = null; }
+      if (this._onResize) {
+        window.removeEventListener('resize', this._onResize);
+        this._onResize = null;
+      }
+      if (this._term) { this._term.dispose(); this._term = null; }
+      this._fit = null;
+      this.session = '';
+      this.connected = false;
+      this.starting = false;
+    },
+  };
+}
+
+function describeViewer() {
+  return {
+    clusterPk: 0,
+    meta: {},
+    resourceType: 'deployment',
+    info: {}, conditions: [], events: [], pods: [], endpoints: [],
+    loading: false, error: null,
+    tab: 'overview',
+    _autoTimer: null,
+    podPage: 1, podPageSize: 15,
+    eventPage: 1, eventPageSize: 20,
+    get resourceTypeLabel() {
+      return {deployment: 'Deployment', statefulset: 'StatefulSet', daemonset: 'DaemonSet', service: 'Service'}[this.resourceType] || '';
+    },
+    get tabs() {
+      if (this.resourceType === 'service') {
+        return [
+          {key: 'overview', label: '概览', icon: 'fa-info-circle'},
+          {key: 'endpoints', label: 'Endpoints', icon: 'fa-plug', count: this.endpoints.length},
+          {key: 'events', label: 'Events', icon: 'fa-bell', count: this.events.length},
+          {key: 'pods', label: '关联 Pods', icon: 'fa-cubes', count: this.pods.length},
+        ];
+      }
+      return [
+        {key: 'overview', label: '概览', icon: 'fa-info-circle'},
+        {key: 'events', label: 'Events', icon: 'fa-bell', count: this.events.length},
+        {key: 'pods', label: '关联 Pods', icon: 'fa-cubes', count: this.pods.length},
+      ];
+    },
+    get abnormalConditions() {
+      return (this.conditions || []).filter(c =>
+        ((c.type === 'Available' || c.type === 'Progressing') && c.status !== 'True') ||
+        (c.type === 'ReplicaFailure' && c.status === 'True')
+      );
+    },
+    get podBlockReasons() {
+      const reasons = new Set();
+      (this.pods || []).forEach(p => { if (p.status_reason) reasons.add(p.status_reason); });
+      return [...reasons];
+    },
+    get isRolling() {
+      if (!this.info) return false;
+      if (this.resourceType === 'deployment') {
+        if (!this.info.replicas) return false;
+        if ((this.info.updated_replicas || 0) >= this.info.replicas) return false;
+        return (this.conditions || []).some(c => c.type === 'Progressing' && c.status === 'True');
+      }
+      if (this.resourceType === 'statefulset') {
+        if (!this.info.replicas) return false;
+        return (this.info.updated_replicas || 0) < this.info.replicas;
+      }
+      if (this.resourceType === 'daemonset') {
+        return (this.info.updated || 0) < (this.info.desired || 0);
+      }
+      return false;
+    },
+    get isScaling() {
+      if (!this.info) return false;
+      if (this.resourceType === 'deployment' || this.resourceType === 'statefulset') {
+        const ready = this.info.ready_replicas || 0;
+        const desired = this.info.replicas || 0;
+        if (desired === 0) return false;
+        return ready < desired && !this.isRolling;
+      }
+      if (this.resourceType === 'daemonset') {
+        const ready = this.info.ready || 0;
+        const desired = this.info.desired || 0;
+        if (desired === 0) return false;
+        return ready < desired && !this.isRolling;
+      }
+      return false;
+    },
+    get podTotalPages() { return Math.ceil(this.pods.length / this.podPageSize) || 1; },
+    get pagedPods() {
+      const s = (this.podPage - 1) * this.podPageSize;
+      return this.pods.slice(s, s + this.podPageSize);
+    },
+    get eventTotalPages() { return Math.ceil(this.events.length / this.eventPageSize) || 1; },
+    get pagedEvents() {
+      const s = (this.eventPage - 1) * this.eventPageSize;
+      return this.events.slice(s, s + this.eventPageSize);
+    },
+    open(detail, type) {
+      this.resourceType = type || 'deployment';
+      this.clusterPk = detail.pk;
+      this.meta = {namespace: detail.namespace, name: detail.name};
+      this.tab = 'overview';
+      this.info = {}; this.conditions = []; this.events = []; this.pods = []; this.endpoints = [];
+      this.error = null;
+      this.podPage = 1; this.eventPage = 1;
+      describeModal.showModal();
+      this.reload();
+      this._startAuto();
+    },
+    _startAuto() {
+      this._stopAuto();
+      this._autoTimer = setInterval(() => {
+        if (!describeModal.open) { this._stopAuto(); return; }
+        this._silentReload();
+      }, 6000);
+    },
+    _stopAuto() {
+      if (this._autoTimer) { clearInterval(this._autoTimer); this._autoTimer = null; }
+    },
+    reload() {
+      this.loading = true;
+      this._fetch();
+    },
+    _silentReload() {
+      this._fetch();
+    },
+    _fetch() {
+      const plural = this.resourceType + 's';
+      fetch(`/resources/${this.clusterPk}/api/${plural}/${this.meta.namespace}/${this.meta.name}/describe/`)
+        .then(r => r.json())
+        .then(d => {
+          this.loading = false;
+          if (d.error) { this.error = d.error; return; }
+          this.info = d.info || {};
+          this.conditions = d.conditions || [];
+          this.events = d.events || [];
+          this.pods = d.pods || [];
+          this.endpoints = d.endpoints || [];
+          if (this.podPage > this.podTotalPages) this.podPage = this.podTotalPages;
+          if (this.eventPage > this.eventTotalPages) this.eventPage = this.eventTotalPages;
+        })
+        .catch(e => { this.loading = false; this.error = e.message; });
+    },
+    clusterPodLogsUrl(ns, podName) {
+      return `/resources/${this.clusterPk}/pods/${ns}/${podName}/logs/`;
+    },
+    handleResourceUpdate(event) {
+      const d = event.detail;
+      if (d && d.action === 'delete' && d.type === 'Pod') {
+        this.pods = this.pods.filter(p => !(p.name === d.name && p.namespace === d.namespace));
+      } else if (d && d.action === 'update') {
+        // 重启/扩缩容/YAML 编辑后立即刷新 describe modal 数据
+        this._silentReload();
+      }
+    },
+  };
+}
+
+function rollbackViewer() {
+  return {
+    clusterPk: 0,
+    meta: {},
+    resourceType: 'deployment',
+    revisions: [], currentRevision: null,
+    loading: false, error: null, rolling: false,
+    pendingRevision: null,
+    page: 1, pageSize: 10,
+    get resourceTypeLabel() {
+      return {deployment: 'Deployment', statefulset: 'StatefulSet', daemonset: 'DaemonSet'}[this.resourceType] || '';
+    },
+    get totalPages() { return Math.ceil(this.revisions.length / this.pageSize) || 1; },
+    get pagedRevisions() {
+      const s = (this.page - 1) * this.pageSize;
+      return this.revisions.slice(s, s + this.pageSize);
+    },
+    open(detail, type) {
+      this.resourceType = type || 'deployment';
+      this.clusterPk = detail.pk;
+      this.meta = {namespace: detail.namespace, name: detail.name};
+      this.revisions = []; this.currentRevision = null;
+      this.error = null; this.rolling = false; this.pendingRevision = null;
+      this.page = 1;
+      rollbackModal.showModal();
+      this.loading = true;
+      const plural = this.resourceType + 's';
+      fetch(`/resources/${this.clusterPk}/api/${plural}/${this.meta.namespace}/${this.meta.name}/revisions/`)
+        .then(r => r.json())
+        .then(d => {
+          this.loading = false;
+          if (d.error) { this.error = d.error; return; }
+          this.currentRevision = d.current_revision;
+          this.revisions = d.revisions || [];
+        })
+        .catch(e => { this.loading = false; this.error = e.message; });
+    },
+    doRollback() {
+      const revision = this.pendingRevision;
+      if (!revision) return;
+      this.rolling = true;
+      const plural = this.resourceType + 's';
+      fetch(`/resources/${this.clusterPk}/${plural}/${this.meta.namespace}/${this.meta.name}/rollback/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({revision: revision}),
+      })
+        .then(r => r.json())
+        .then(d => {
+          this.rolling = false;
+          if (d.success) {
+            if (typeof showToast === 'function') showToast(d.message || '已回滚', 'success');
+            if (d.resource) {
+              window.dispatchEvent(new CustomEvent('resource-updated', {detail: {action: 'update', resource: d.resource}}));
+            } else {
+              window.dispatchEvent(new CustomEvent('resource-updated', {detail: {}}));
+            }
+            this.pendingRevision = null;
+            rollbackModal.close();
+          } else {
+            this.error = d.error || '回滚失败';
+            this.pendingRevision = null;
+          }
+        })
+        .catch(e => { this.rolling = false; this.error = e.message; this.pendingRevision = null; });
+    },
+  };
+}
+</script>
+{{end}}

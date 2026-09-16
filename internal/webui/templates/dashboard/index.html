@@ -1,0 +1,757 @@
+{{define "title"}}仪表盘 - Sailor{{end}}
+{{define "page_title"}}仪表盘{{end}}
+
+{{define "extra_head"}}
+<style>
+  /* 降噪后的统计卡：纯色 base-100 面板，左侧一条细色条标识类别 */
+  .dash-card {
+    position: relative; border-radius: 0.75rem; padding: 1.25rem;
+    background: var(--color-base-100);
+    border: 1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .dash-card:hover { border-color: color-mix(in oklab, var(--color-base-content) 16%, transparent); box-shadow: 0 1px 4px color-mix(in oklab, var(--color-base-content) 5%, transparent); }
+  .dash-card::before {
+    content: ''; position: absolute; left: 0; top: 0.875rem; bottom: 0.875rem;
+    width: 3px; border-radius: 0 3px 3px 0; opacity: 0.9;
+  }
+
+  .dash-card-amber::before   { background: #f59e0b; }
+  .dash-card-emerald::before { background: #10b981; }
+  .dash-card-blue::before    { background: #3b82f6; }
+  .dash-card-violet::before  { background: #8b5cf6; }
+  .dash-card-rose::before    { background: #f43f5e; }
+
+  .chart-card {
+    border-radius: 0.75rem; border: 1px solid color-mix(in oklab, var(--color-base-content) 8%, transparent);
+    background: var(--color-base-100); padding: 1.25rem;
+  }
+</style>
+{{end}}
+
+{{define "content"}}
+{{if not .ActiveCluster}}
+{{/* 未选集群时把可选集群铺成卡片，点一下即进。 */}}
+<div class="fx-rise flex flex-col justify-center" style="min-height: calc(100vh - 12rem);">
+  <div class="flex flex-col items-center text-center mb-8">
+    <div class="fx-logo w-14 h-14 rounded-2xl flex items-center justify-center mb-4">
+      <i class="fas fa-dharmachakra text-2xl text-white"></i>
+    </div>
+    <h2 class="vb-gradient-text text-2xl font-bold mb-1.5">欢迎使用 Sailor</h2>
+    <p class="vb-shiny text-sm">选择一个集群开始，或导入新的 Kubeconfig</p>
+  </div>
+
+  {{if .AllClusters}}
+  <div data-vb-bento class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 max-w-5xl mx-auto">
+    {{range .AllClusters}}
+    <a href="/clusters/{{.ID}}/select/?next=/"
+       data-vb-reveal data-vb-reveal-stagger="0.06" data-vb-spark
+       class="vb-bento-card vb-spotlight-card vb-glare fx-card fx-tilt group block rounded-xl border border-base-300 bg-base-100 p-5 no-underline">
+      <div class="flex items-start justify-between mb-4">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-10 h-10 rounded-lg grid place-items-center flex-shrink-0
+                      {{if eq .Status "online"}}bg-success/15 text-success{{else if eq .Status "offline"}}bg-error/15 text-error{{else}}bg-warning/15 text-warning{{end}}">
+            <i class="fas fa-server text-sm"></i>
+          </div>
+          <div class="min-w-0">
+            <div class="font-semibold text-base-content truncate">{{.Name}}</div>
+            <div class="text-xs opacity-45 mt-0.5">{{if .K8sVersion}}{{.K8sVersion}}{{else}}版本未知{{end}}</div>
+          </div>
+        </div>
+        <span class="flex items-center gap-1.5 text-xs flex-shrink-0
+                     {{if eq .Status "online"}}text-success{{else if eq .Status "offline"}}text-error{{else}}text-warning{{end}}">
+          <span class="fx-pulse w-1.5 h-1.5 rounded-full bg-current"></span>
+          {{statusDisplay .Status}}
+        </span>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3 pt-4 border-t border-base-300">
+        <div>
+          <div class="text-[10px] uppercase tracking-wider opacity-40">节点</div>
+          <div class="text-lg font-semibold mt-0.5">{{if .NodeCount}}{{.NodeCount}}{{else}}-{{end}}</div>
+        </div>
+        <div>
+          <div class="text-[10px] uppercase tracking-wider opacity-40">进入</div>
+          <div class="text-sm font-medium mt-1 text-primary flex items-center gap-1.5">
+            仪表盘
+            <i class="fas fa-arrow-right text-[10px] transition-transform duration-200 group-hover:translate-x-1"></i>
+          </div>
+        </div>
+      </div>
+    </a>
+    {{end}}
+
+    <a href="/clusters/add/" data-vb-reveal data-vb-reveal-stagger="0.06" data-vb-spark
+       class="vb-bento-card fx-card group flex flex-col items-center justify-center gap-2.5 rounded-xl border border-dashed border-base-300 bg-base-100/40 p-5 no-underline min-h-[168px]">
+      <div class="vb-magnet" data-vb-magnet-padding="70" data-vb-magnet-strength="4">
+        <div class="vb-magnet-inner w-10 h-10 rounded-lg bg-primary/10 text-primary grid place-items-center">
+          <i class="fas fa-plus text-sm"></i>
+        </div>
+      </div>
+      <div class="text-sm font-medium text-primary">导入新集群</div>
+      <div class="text-xs opacity-40">粘贴 Kubeconfig 即可接入</div>
+    </a>
+  </div>
+  {{else}}
+  <div class="max-w-md mx-auto text-center rounded-xl border border-dashed border-base-300 bg-base-100 p-10">
+    <i class="fas fa-cloud-upload-alt text-3xl opacity-25 mb-4"></i>
+    <p class="text-sm opacity-60 mb-5">还没有接入任何集群，导入 Kubeconfig 后即可开始管理。</p>
+    <a href="/clusters/add/" class="fx-btn btn btn-primary btn-sm gap-2">
+      <i class="fas fa-plus text-xs"></i> 导入集群
+    </a>
+  </div>
+  {{end}}
+</div>
+{{else}}
+<div x-data="dashboard()" x-init="load(); $watch('nodeSearch', () => currentPage = 1); $watch('nodeSort', () => currentPage = 1)">
+
+  <!-- Cluster Quick Info -->
+  <div class="flex flex-wrap items-center gap-2 mb-5">
+    <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-base-300 bg-base-100 text-sm">
+      <div class="w-2 h-2 rounded-full {{if eq .ActiveCluster.Status "online"}}bg-green-400{{else if eq .ActiveCluster.Status "offline"}}bg-red-400{{else}}bg-yellow-400{{end}} animate-pulse"></div>
+      <span class="font-medium">{{.ActiveCluster.DisplayName}}</span>
+    </div>
+    <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-base-300 bg-base-100 text-xs opacity-60">
+      <i class="fas fa-code-branch text-[10px]"></i>
+      {{if .ActiveCluster.K8sVersion}}{{.ActiveCluster.K8sVersion}}{{else}}-{{end}}
+    </div>
+    <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-base-300 bg-base-100 text-xs opacity-60">
+      <i class="fas fa-server text-[10px]"></i>
+      {{.ActiveCluster.NodeCount}} 节点
+    </div>
+  </div>
+
+  <!-- Loading -->
+  <div x-show="loading" class="flex items-center justify-center py-20 gap-3">
+    <span class="loading loading-spinner loading-md text-primary"></span>
+    <span class="text-sm opacity-60">正在获取集群数据...</span>
+  </div>
+
+  <!-- Error -->
+  <div x-show="!loading && error" x-cloak class="alert alert-error text-sm border border-error/20">
+    <i class="fas fa-exclamation-triangle text-sm"></i>
+    <span x-text="error"></span>
+  </div>
+
+  <!-- ========== WITH Metrics ========== -->
+  <div x-show="!loading && hasMetrics" x-cloak>
+
+    <!-- Pod Requests fallback banner -->
+    <div x-show="dataSource === 'pod_requests'" class="flex items-center gap-3 p-4 rounded-lg border border-blue-500/20 bg-blue-500/5 mb-5">
+      <div class="w-8 h-8 rounded-lg bg-blue-500/15 grid place-items-center flex-shrink-0">
+        <i class="fas fa-info-circle text-blue-400 text-sm"></i>
+      </div>
+      <div>
+        <div class="text-sm font-medium text-blue-400">数据来源：Pod Requests 汇总</div>
+        <div class="text-xs opacity-50 mt-0.5">集群未安装 Metrics Server，CPU/内存数据基于各 Pod 的 resource requests 累加（已分配量），非实时使用量。安装 Metrics Server 后可获取实时数据。</div>
+      </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div data-vb-bento class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+      <div class="vb-bento-card vb-spotlight-card fx-card dash-card dash-card-amber" data-vb-reveal data-vb-reveal-stagger="0.05">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5" x-text="dataSource === 'pod_requests' ? 'CPU 已分配' : 'CPU 使用率'"></div>
+            <div class="fx-metric vb-counter text-2xl font-bold text-amber-400" x-text="summary.cpu_percent + '%'"></div>
+          </div>
+          <div class="w-9 h-9 rounded-lg bg-amber-500/15 grid place-items-center">
+            <i class="fas fa-microchip text-amber-400 text-sm"></i>
+          </div>
+        </div>
+        <div class="fx-bar mt-3 w-full bg-black/10 rounded-full h-1.5 overflow-hidden">
+          <div class="bg-amber-400 h-full rounded-full transition-all duration-500" :style="`width: ${summary.cpu_percent}%`"></div>
+        </div>
+        <div class="flex justify-between mt-2 text-[10px] opacity-40">
+          <span x-text="summary.cpu_used + ' 核'"></span>
+          <span x-text="summary.cpu_capacity + ' 核'"></span>
+        </div>
+      </div>
+
+      <div class="vb-bento-card vb-spotlight-card fx-card dash-card dash-card-emerald" data-vb-reveal data-vb-reveal-stagger="0.05">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5" x-text="dataSource === 'pod_requests' ? '内存已分配' : '内存使用率'"></div>
+            <div class="fx-metric vb-counter text-2xl font-bold text-emerald-400" x-text="summary.mem_percent + '%'"></div>
+          </div>
+          <div class="w-9 h-9 rounded-lg bg-emerald-500/15 grid place-items-center">
+            <i class="fas fa-memory text-emerald-400 text-sm"></i>
+          </div>
+        </div>
+        <div class="fx-bar mt-3 w-full bg-black/10 rounded-full h-1.5 overflow-hidden">
+          <div class="bg-emerald-400 h-full rounded-full transition-all duration-500" :style="`width: ${summary.mem_percent}%`"></div>
+        </div>
+        <div class="flex justify-between mt-2 text-[10px] opacity-40">
+          <span x-text="summary.mem_used_gb + ' GB'"></span>
+          <span x-text="summary.mem_capacity_gb + ' GB'"></span>
+        </div>
+      </div>
+
+      <div class="vb-bento-card vb-spotlight-card fx-card dash-card dash-card-blue" data-vb-reveal data-vb-reveal-stagger="0.05">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">节点总数</div>
+            <div class="fx-metric vb-counter text-2xl font-bold text-blue-400" x-text="nodes.length"></div>
+          </div>
+          <div class="w-9 h-9 rounded-lg bg-blue-500/15 grid place-items-center">
+            <i class="fas fa-server text-blue-400 text-sm"></i>
+          </div>
+        </div>
+      </div>
+
+      <div class="vb-bento-card vb-spotlight-card fx-card dash-card dash-card-violet" data-vb-reveal data-vb-reveal-stagger="0.05">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">GPU 节点</div>
+            <div class="fx-metric vb-counter text-2xl font-bold text-violet-400" x-text="nodes.filter(n => n.is_gpu).length"></div>
+          </div>
+          <div class="w-9 h-9 rounded-lg bg-violet-500/15 grid place-items-center">
+            <i class="fas fa-microchip text-violet-400 text-sm"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+      <!-- CPU Top 10 -->
+      <div class="fx-card fx-card-glow chart-card" data-vb-reveal>
+        <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">CPU 使用率 Top 10</h3>
+        <div id="cpuTop10" style="width: 100%; height: 340px;"></div>
+      </div>
+      <!-- Memory Top 10 -->
+      <div class="fx-card fx-card-glow chart-card" data-vb-reveal>
+        <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">内存使用率 Top 10</h3>
+        <div id="memTop10" style="width: 100%; height: 340px;"></div>
+      </div>
+      <!-- Resource Distribution -->
+      <div class="fx-card fx-card-glow chart-card" data-vb-reveal>
+        <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">资源分布</h3>
+        <div id="resourcePie" style="width: 100%; height: 340px;"></div>
+      </div>
+    </div>
+
+    <!-- Node Detail Table - Card Grid -->
+    <div class="fx-card fx-card-glow chart-card">
+      <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">节点资源明细</h3>
+      <div class="flex items-center gap-2 mb-3">
+        <input type="text" x-model="nodeSearch" placeholder="搜索节点..." class="input input-bordered input-sm h-8 min-h-0 w-48 text-xs focus:input-primary">
+        <select x-model="nodeSort" class="select select-bordered select-sm h-8 min-h-0 text-xs w-36 focus:select-primary">
+          <option value="name">按名称</option>
+          <option value="cpu_desc">CPU 使用率 ↓</option>
+          <option value="mem_desc">内存使用率 ↓</option>
+        </select>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        <template x-for="n in paginatedNodes" :key="n.name">
+          <div class="vb-spotlight-card p-4 rounded-lg border border-base-300 bg-base-100 hover:border-base-content/15 transition-all">
+            <!-- Node Header -->
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="w-2 h-2 rounded-full flex-shrink-0" :class="n.status === 'Ready' ? 'bg-green-400' : 'bg-red-400'" :title="n.status"></span>
+                <span class="badge badge-xs font-medium flex-shrink-0"
+                  :class="n.is_gpu ? 'bg-violet-500/15 text-violet-400 border-violet-500/30' : 'bg-sky-500/15 text-sky-400 border-sky-500/30'"
+                  x-text="n.is_gpu ? 'GPU' : 'CPU'"></span>
+                <span class="font-mono text-xs truncate" :title="n.name" x-text="n.name"></span>
+              </div>
+              <div class="flex items-center gap-1.5 flex-shrink-0">
+                <span x-show="n.is_gpu && n.gpu_model" class="text-[10px] text-violet-400 opacity-60" x-text="n.gpu_model + ' x' + n.gpu_count"></span>
+                <span class="text-[10px] opacity-30 px-1.5 py-0.5 rounded bg-base-200" x-text="n.roles"></span>
+              </div>
+            </div>
+            <!-- CPU -->
+            <div class="mb-2.5">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] opacity-40 flex items-center gap-1"><i class="fas fa-microchip text-[8px] text-amber-400"></i> CPU</span>
+                <span class="text-[10px] font-medium" :class="n.cpu_percent > 80 ? 'text-red-400' : n.cpu_percent > 60 ? 'text-amber-400' : 'text-green-400'" x-text="n.cpu_percent + '%'"></span>
+              </div>
+              <div class="w-full bg-base-300/50 rounded-full h-1.5 overflow-hidden">
+                <div class="h-full rounded-full transition-all duration-500"
+                  :class="n.cpu_percent > 80 ? 'bg-red-400' : n.cpu_percent > 60 ? 'bg-amber-400' : 'bg-green-400'"
+                  :style="`width: ${n.cpu_percent}%`"></div>
+              </div>
+              <div class="flex justify-between mt-1 text-[10px] opacity-30">
+                <span x-text="n.cpu_used + ' 核'"></span>
+                <span x-text="n.cpu_capacity + ' 核'"></span>
+              </div>
+            </div>
+            <!-- Memory -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] opacity-40 flex items-center gap-1"><i class="fas fa-memory text-[8px] text-emerald-400"></i> 内存</span>
+                <span class="text-[10px] font-medium" :class="n.mem_percent > 80 ? 'text-red-400' : n.mem_percent > 60 ? 'text-amber-400' : 'text-green-400'" x-text="n.mem_percent + '%'"></span>
+              </div>
+              <div class="w-full bg-base-300/50 rounded-full h-1.5 overflow-hidden">
+                <div class="h-full rounded-full transition-all duration-500"
+                  :class="n.mem_percent > 80 ? 'bg-red-400' : n.mem_percent > 60 ? 'bg-amber-400' : 'bg-green-400'"
+                  :style="`width: ${n.mem_percent}%`"></div>
+              </div>
+              <div class="flex justify-between mt-1 text-[10px] opacity-30">
+                <span x-text="n.mem_used_gb + ' GB'"></span>
+                <span x-text="n.mem_capacity_gb + ' GB'"></span>
+              </div>
+            </div>
+            <!-- System Info -->
+            <div class="mt-3 pt-3 border-t border-base-300/50 grid grid-cols-2 gap-x-3 gap-y-1.5">
+              <div class="flex items-center gap-1.5" x-show="n.container_runtime">
+                <i class="fas fa-box text-[8px] text-cyan-400 opacity-60 w-2.5 text-center"></i>
+                <span class="text-[10px] opacity-35 truncate" x-text="n.container_runtime" :title="n.container_runtime"></span>
+              </div>
+              <div class="flex items-center gap-1.5" x-show="n.kubelet_version">
+                <i class="fab fa-kubernetes text-[8px] text-blue-400 opacity-60 w-2.5 text-center"></i>
+                <span class="text-[10px] opacity-35 truncate" x-text="n.kubelet_version"></span>
+              </div>
+              <div class="flex items-center gap-1.5" x-show="n.os_image">
+                <i class="fas fa-desktop text-[8px] text-violet-400 opacity-60 w-2.5 text-center"></i>
+                <span class="text-[10px] opacity-35 truncate" x-text="n.os_image" :title="n.os_image"></span>
+              </div>
+              <div class="flex items-center gap-1.5" x-show="n.kernel_version">
+                <i class="fas fa-terminal text-[8px] text-amber-400 opacity-60 w-2.5 text-center"></i>
+                <span class="text-[10px] opacity-35 truncate" x-text="n.kernel_version"></span>
+              </div>
+              <div class="flex items-center gap-1.5" x-show="n.arch">
+                <i class="fas fa-cog text-[8px] text-emerald-400 opacity-60 w-2.5 text-center"></i>
+                <span class="text-[10px] opacity-35" x-text="n.arch"></span>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+      <div x-show="paginatedNodes.length === 0 && filteredNodes.length > 0" class="text-center py-10 opacity-40 text-sm">没有匹配的节点</div>
+      <!-- Pagination -->
+      <div x-show="totalPages > 1" class="flex items-center justify-center gap-2 mt-4">
+        <button @click="currentPage = 1" :disabled="currentPage === 1" class="btn btn-ghost btn-xs gap-1" :class="currentPage === 1 ? 'opacity-30 cursor-not-allowed' : ''">
+          <i class="fas fa-angle-double-left text-[10px]"></i>
+        </button>
+        <button @click="currentPage--" :disabled="currentPage === 1" class="btn btn-ghost btn-xs gap-1" :class="currentPage === 1 ? 'opacity-30 cursor-not-allowed' : ''">
+          <i class="fas fa-chevron-left text-[10px]"></i>
+        </button>
+        <span class="text-xs opacity-50 px-2">第 <span class="font-medium text-primary" x-text="currentPage"></span> / <span x-text="totalPages"></span> 页</span>
+        <span class="text-[10px] opacity-30">(<span x-text="filteredNodes.length"></span> 条)</span>
+        <button @click="currentPage++" :disabled="currentPage === totalPages" class="btn btn-ghost btn-xs gap-1" :class="currentPage === totalPages ? 'opacity-30 cursor-not-allowed' : ''">
+          <i class="fas fa-chevron-right text-[10px]"></i>
+        </button>
+        <button @click="currentPage = totalPages" :disabled="currentPage === totalPages" class="btn btn-ghost btn-xs gap-1" :class="currentPage === totalPages ? 'opacity-30 cursor-not-allowed' : ''">
+          <i class="fas fa-angle-double-right text-[10px]"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== WITHOUT Metrics ========== -->
+  <div x-show="!loading && !hasMetrics && !error" x-cloak>
+
+    <!-- Info Banner -->
+    <div class="flex items-center gap-3 p-4 rounded-lg border border-amber-500/20 bg-amber-500/5 mb-5">
+      <div class="w-8 h-8 rounded-lg bg-amber-500/15 grid place-items-center flex-shrink-0">
+        <i class="fas fa-info-circle text-amber-400 text-sm"></i>
+      </div>
+      <div>
+        <div class="text-sm font-medium text-amber-400">集群未安装 Metrics Server</div>
+        <div class="text-xs opacity-50 mt-0.5">无法获取 CPU/内存实时使用数据。以下展示节点容量信息。</div>
+      </div>
+    </div>
+
+    <!-- Capacity Cards -->
+    <div data-vb-bento class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+      <div class="vb-bento-card vb-spotlight-card fx-card dash-card dash-card-blue" data-vb-reveal data-vb-reveal-stagger="0.05">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">节点总数</div>
+            <div class="fx-metric vb-counter text-2xl font-bold text-blue-400" x-text="nodes.length"></div>
+          </div>
+          <div class="w-9 h-9 rounded-lg bg-blue-500/15 grid place-items-center">
+            <i class="fas fa-server text-blue-400 text-sm"></i>
+          </div>
+        </div>
+      </div>
+      <div class="vb-bento-card vb-spotlight-card fx-card dash-card dash-card-amber" data-vb-reveal data-vb-reveal-stagger="0.05">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">CPU 总容量</div>
+            <div class="fx-metric vb-counter text-2xl font-bold text-amber-400" x-text="summary.cpu_capacity + ' 核'"></div>
+          </div>
+          <div class="w-9 h-9 rounded-lg bg-amber-500/15 grid place-items-center">
+            <i class="fas fa-microchip text-amber-400 text-sm"></i>
+          </div>
+        </div>
+      </div>
+      <div class="vb-bento-card vb-spotlight-card fx-card dash-card dash-card-emerald" data-vb-reveal data-vb-reveal-stagger="0.05">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">内存总容量</div>
+            <div class="fx-metric vb-counter text-2xl font-bold text-emerald-400" x-text="summary.mem_capacity_gb + ' GB'"></div>
+          </div>
+          <div class="w-9 h-9 rounded-lg bg-emerald-500/15 grid place-items-center">
+            <i class="fas fa-memory text-emerald-400 text-sm"></i>
+          </div>
+        </div>
+      </div>
+      <div class="vb-bento-card vb-spotlight-card fx-card dash-card dash-card-violet" data-vb-reveal data-vb-reveal-stagger="0.05">
+        <div class="flex items-center justify-between">
+          <div>
+            <div class="text-[10px] uppercase tracking-wider opacity-40 mb-1.5">GPU 节点</div>
+            <div class="fx-metric vb-counter text-2xl font-bold text-violet-400" x-text="nodes.filter(n => n.is_gpu).length"></div>
+          </div>
+          <div class="w-9 h-9 rounded-lg bg-violet-500/15 grid place-items-center">
+            <i class="fas fa-microchip text-violet-400 text-sm"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Capacity Chart -->
+    <div class="fx-card fx-card-glow chart-card mb-5" data-vb-reveal>
+      <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">各节点资源容量</h3>
+      <div id="capacityBar" style="width: 100%; height: 320px;"></div>
+    </div>
+
+    <!-- Node Detail Cards (capacity only) -->
+    <div class="fx-card fx-card-glow chart-card">
+      <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">节点资源明细</h3>
+      <div class="flex items-center gap-2 mb-3">
+        <input type="text" x-model="nodeSearch" placeholder="搜索节点..." class="input input-bordered input-sm h-8 min-h-0 w-48 text-xs focus:input-primary">
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        <template x-for="n in paginatedNodes" :key="n.name">
+          <div class="vb-spotlight-card p-4 rounded-lg border border-base-300 bg-base-100 hover:border-base-content/15 transition-all">
+            <!-- Node Header -->
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="w-2 h-2 rounded-full flex-shrink-0" :class="n.status === 'Ready' ? 'bg-green-400' : 'bg-red-400'" :title="n.status"></span>
+                <span class="badge badge-xs font-medium flex-shrink-0"
+                  :class="n.is_gpu ? 'bg-violet-500/15 text-violet-400 border-violet-500/30' : 'bg-sky-500/15 text-sky-400 border-sky-500/30'"
+                  x-text="n.is_gpu ? 'GPU' : 'CPU'"></span>
+                <span class="font-mono text-xs truncate" :title="n.name" x-text="n.name"></span>
+              </div>
+              <div class="flex items-center gap-1.5 flex-shrink-0">
+                <span x-show="n.is_gpu && n.gpu_model" class="text-[10px] text-violet-400 opacity-60" x-text="n.gpu_model + ' x' + n.gpu_count"></span>
+                <span class="text-[10px] opacity-30 px-1.5 py-0.5 rounded bg-base-200" x-text="n.roles"></span>
+              </div>
+            </div>
+            <!-- CPU Capacity -->
+            <div class="mb-2.5">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] opacity-40 flex items-center gap-1"><i class="fas fa-microchip text-[8px] text-amber-400"></i> CPU 容量</span>
+                <span class="text-[10px] font-medium text-amber-400" x-text="n.cpu_capacity + ' 核'"></span>
+              </div>
+              <div class="w-full bg-base-300/50 rounded-full h-1.5 overflow-hidden">
+                <div class="h-full rounded-full bg-amber-400/40" style="width: 100%"></div>
+              </div>
+            </div>
+            <!-- Memory Capacity -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] opacity-40 flex items-center gap-1"><i class="fas fa-memory text-[8px] text-emerald-400"></i> 内存容量</span>
+                <span class="text-[10px] font-medium text-emerald-400" x-text="n.mem_capacity_gb + ' GB'"></span>
+              </div>
+              <div class="w-full bg-base-300/50 rounded-full h-1.5 overflow-hidden">
+                <div class="h-full rounded-full bg-emerald-400/40" style="width: 100%"></div>
+              </div>
+            </div>
+            <!-- System Info -->
+            <div class="mt-3 pt-3 border-t border-base-300/50 grid grid-cols-2 gap-x-3 gap-y-1.5">
+              <div class="flex items-center gap-1.5" x-show="n.container_runtime">
+                <i class="fas fa-box text-[8px] text-cyan-400 opacity-60 w-2.5 text-center"></i>
+                <span class="text-[10px] opacity-35 truncate" x-text="n.container_runtime" :title="n.container_runtime"></span>
+              </div>
+              <div class="flex items-center gap-1.5" x-show="n.kubelet_version">
+                <i class="fab fa-kubernetes text-[8px] text-blue-400 opacity-60 w-2.5 text-center"></i>
+                <span class="text-[10px] opacity-35 truncate" x-text="n.kubelet_version"></span>
+              </div>
+              <div class="flex items-center gap-1.5" x-show="n.os_image">
+                <i class="fas fa-desktop text-[8px] text-violet-400 opacity-60 w-2.5 text-center"></i>
+                <span class="text-[10px] opacity-35 truncate" x-text="n.os_image" :title="n.os_image"></span>
+              </div>
+              <div class="flex items-center gap-1.5" x-show="n.kernel_version">
+                <i class="fas fa-terminal text-[8px] text-amber-400 opacity-60 w-2.5 text-center"></i>
+                <span class="text-[10px] opacity-35 truncate" x-text="n.kernel_version"></span>
+              </div>
+              <div class="flex items-center gap-1.5" x-show="n.arch">
+                <i class="fas fa-cog text-[8px] text-emerald-400 opacity-60 w-2.5 text-center"></i>
+                <span class="text-[10px] opacity-35" x-text="n.arch"></span>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+      <div x-show="paginatedNodes.length === 0 && filteredNodes.length > 0" class="text-center py-10 opacity-40 text-sm">没有匹配的节点</div>
+      <!-- Pagination -->
+      <div x-show="totalPages > 1" class="flex items-center justify-center gap-2 mt-4">
+        <button @click="currentPage = 1" :disabled="currentPage === 1" class="btn btn-ghost btn-xs gap-1" :class="currentPage === 1 ? 'opacity-30 cursor-not-allowed' : ''">
+          <i class="fas fa-angle-double-left text-[10px]"></i>
+        </button>
+        <button @click="currentPage--" :disabled="currentPage === 1" class="btn btn-ghost btn-xs gap-1" :class="currentPage === 1 ? 'opacity-30 cursor-not-allowed' : ''">
+          <i class="fas fa-chevron-left text-[10px]"></i>
+        </button>
+        <span class="text-xs opacity-50 px-2">第 <span class="font-medium text-primary" x-text="currentPage"></span> / <span x-text="totalPages"></span> 页</span>
+        <span class="text-[10px] opacity-30">(<span x-text="filteredNodes.length"></span> 条)</span>
+        <button @click="currentPage++" :disabled="currentPage === totalPages" class="btn btn-ghost btn-xs gap-1" :class="currentPage === totalPages ? 'opacity-30 cursor-not-allowed' : ''">
+          <i class="fas fa-chevron-right text-[10px]"></i>
+        </button>
+        <button @click="currentPage = totalPages" :disabled="currentPage === totalPages" class="btn btn-ghost btn-xs gap-1" :class="currentPage === totalPages ? 'opacity-30 cursor-not-allowed' : ''">
+          <i class="fas fa-angle-double-right text-[10px]"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+{{end}}
+{{end}}
+
+{{define "extra_js"}}
+{{if .ActiveCluster}}
+<script src="/static/js/echarts.min.js"></script>
+<script>
+function dashboard() {
+  return {
+    loading: true,
+    nodes: [],
+    summary: {
+      cpu_capacity: 0, cpu_used: 0, cpu_percent: 0,
+      mem_capacity_gb: 0, mem_used_gb: 0, mem_percent: 0
+    },
+    error: null,
+    hasMetrics: false,
+    dataSource: null,  // 'metrics_server' or 'pod_requests'
+    nodeSearch: '',
+    nodeSort: 'cpu_desc',
+    currentPage: 1,
+    pageSize: 20,
+    _charts: {},       // 容器 id -> echarts 实例（复用，避免重复 init）
+    _resizeObs: null,  // 容器尺寸监听：webview 启动布局 / x-show 展开 / 侧栏开合都靠它重排
+
+    get filteredNodes() {
+      let result = this.nodes;
+      if (this.nodeSearch) {
+        const q = this.nodeSearch.toLowerCase();
+        result = result.filter(n => n.name.toLowerCase().includes(q));
+      }
+      if (this.nodeSort === 'cpu_desc') result = [...result].sort((a, b) => b.cpu_percent - a.cpu_percent);
+      else if (this.nodeSort === 'mem_desc') result = [...result].sort((a, b) => b.mem_percent - a.mem_percent);
+      else result = [...result].sort((a, b) => a.name.localeCompare(b.name));
+      return result;
+    },
+    get totalPages() {
+      return Math.ceil(this.filteredNodes.length / this.pageSize) || 1;
+    },
+    get paginatedNodes() {
+      const start = (this.currentPage - 1) * this.pageSize;
+      return this.filteredNodes.slice(start, start + this.pageSize);
+    },
+    load() {
+      fetch('/clusters/{{.ActiveCluster.ID}}/metrics/')
+        .then(r => r.json())
+        .then(data => {
+          this.nodes = data.nodes || [];
+          this.summary = data.summary || this.summary;
+          this.error = data.error;
+          this.hasMetrics = data.has_metrics;
+          this.dataSource = data.data_source;
+          this.loading = false;
+          this.$nextTick(() => this._renderWhenReady());
+        })
+        .catch(err => {
+          this.error = err.message;
+          this.loading = false;
+        });
+    },
+
+    // 图表容器有真实尺寸后才 init。应用刚打开时 webview 首次布局尚未稳定、
+    // x-show 区块正在展开、GSAP 入场动画进行中 —— 这些时刻容器宽高可能是 0，
+    // echarts.init 拿到 0×0 画布就会表现为「图表加载不全」。每 50ms 轮询，
+    // 最长等 ~3s 后兜底强制渲染（宁可小图也不缺图）。
+    _renderWhenReady() {
+      const ids = this.hasMetrics
+        ? ['cpuTop10', 'memTop10', 'resourcePie']
+        : ['capacityBar'];
+      let tries = 0;
+      const tick = () => {
+        const ready = ids.every(id => {
+          const el = document.getElementById(id);
+          return el && el.offsetWidth > 0 && el.offsetHeight > 0;
+        });
+        if (ready || ++tries > 60) {
+          if (this.hasMetrics) this.renderMetricsCharts();
+          else if (this.nodes.length > 0) this.renderCapacityChart();
+          this._observeCharts();
+          return;
+        }
+        setTimeout(tick, 50);
+      };
+      tick();
+    },
+
+    // 复用同一容器的 echarts 实例；setOption 传 notMerge 全量替换，
+    // 避免 has_metrics 状态变化时新旧 series 混叠
+    _chart(id) {
+      if (!this._charts[id]) {
+        this._charts[id] = echarts.init(document.getElementById(id));
+      }
+      return this._charts[id];
+    },
+
+    // 容器尺寸变化时统一 resize：窗口缩放、侧栏开合改变内容区宽度、
+    // x-show 区块从隐藏到展开。ResizeObserver 比只挂 window.resize
+    // 覆盖面广（侧栏开合不触发 window resize）。
+    _observeCharts() {
+      if (this._resizeObs || !window.ResizeObserver) return;
+      this._resizeObs = new ResizeObserver(() => {
+        Object.values(this._charts).forEach(c => c && c.resize());
+      });
+      ['cpuTop10', 'memTop10', 'resourcePie', 'capacityBar'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) this._resizeObs.observe(el);
+      });
+    },
+
+    renderCapacityChart() {
+      const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+      const textColor = isDark ? '#a1a1aa' : '#52525b';
+      const gridColor = isDark ? '#27272a' : '#e4e4e7';
+      const names = this.nodes.map(n => n.name.length > 20 ? n.name.substring(0, 18) + '...' : n.name);
+
+      const chart = this._chart('capacityBar');
+      chart.setOption({
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: isDark ? '#1e1e2e' : '#fff', borderColor: gridColor, textStyle: { color: textColor, fontSize: 11 } },
+        legend: { data: ['CPU (核)', '内存 (GB)'], textStyle: { color: textColor, fontSize: 11 }, top: 0 },
+        grid: { left: 10, right: 30, top: 30, bottom: 5, containLabel: true },
+        xAxis: { type: 'value', axisLabel: { color: textColor, fontSize: 11 }, splitLine: { lineStyle: { color: gridColor } } },
+        yAxis: { type: 'category', data: names, axisLabel: { color: textColor, fontSize: 11 }, inverse: true },
+        series: [
+          { name: 'CPU (核)', type: 'bar', data: this.nodes.map(n => n.cpu_capacity), itemStyle: { color: '#f59e0b', borderRadius: [0, 4, 4, 0] }, barGap: '10%' },
+          { name: '内存 (GB)', type: 'bar', data: this.nodes.map(n => n.mem_capacity_gb), itemStyle: { color: '#10b981', borderRadius: [0, 4, 4, 0] } },
+        ]
+      }, true);
+      chart.resize();
+    },
+    renderMetricsCharts() {
+      const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+      const textColor = isDark ? '#a1a1aa' : '#52525b';
+      const gridColor = isDark ? '#27272a' : '#e4e4e7';
+
+      // Sort nodes by CPU usage and get top 10
+      const cpuSorted = [...this.nodes].sort((a, b) => b.cpu_percent - a.cpu_percent).slice(0, 10);
+      const cpuNames = cpuSorted.map(n => n.name.length > 15 ? n.name.substring(0, 13) + '..' : n.name);
+      const cpuData = cpuSorted.map(n => n.cpu_percent);
+
+      // Sort nodes by Memory usage and get top 10
+      const memSorted = [...this.nodes].sort((a, b) => b.mem_percent - a.mem_percent).slice(0, 10);
+      const memNames = memSorted.map(n => n.name.length > 15 ? n.name.substring(0, 13) + '..' : n.name);
+      const memData = memSorted.map(n => n.mem_percent);
+
+      // CPU Top 10 - Horizontal Bar
+      const cpuTop10 = this._chart('cpuTop10');
+      cpuTop10.setOption({
+        tooltip: {
+          trigger: 'axis', axisPointer: { type: 'shadow' },
+          backgroundColor: isDark ? '#1e1e2e' : '#fff', borderColor: gridColor,
+          textStyle: { color: textColor, fontSize: 11 },
+          formatter: params => `<b>${cpuSorted[params[0].dataIndex].name}</b><br/>CPU: ${params[0].value}%`
+        },
+        grid: { left: 10, right: 40, top: 10, bottom: 5, containLabel: true },
+        xAxis: {
+          type: 'value', max: 100,
+          axisLabel: { color: textColor, fontSize: 10, formatter: '{value}%' },
+          splitLine: { lineStyle: { color: gridColor, type: 'dashed' } }
+        },
+        yAxis: {
+          type: 'category', data: cpuNames, inverse: true,
+          axisLabel: { color: textColor, fontSize: 10 },
+          axisLine: { lineStyle: { color: gridColor } }
+        },
+        series: [{
+          type: 'bar', data: cpuData,
+          itemStyle: {
+            color: params => {
+              const val = params.value;
+              if (val > 80) return '#ef4444';
+              if (val > 60) return '#f59e0b';
+              return '#10b981';
+            },
+            borderRadius: [0, 4, 4, 0]
+          },
+          label: {
+            show: true, position: 'right', color: textColor,
+            fontSize: 10, formatter: '{c}%'
+          }
+        }]
+      }, true);
+
+      // Memory Top 10 - Horizontal Bar
+      const memTop10 = this._chart('memTop10');
+      memTop10.setOption({
+        tooltip: {
+          trigger: 'axis', axisPointer: { type: 'shadow' },
+          backgroundColor: isDark ? '#1e1e2e' : '#fff', borderColor: gridColor,
+          textStyle: { color: textColor, fontSize: 11 },
+          formatter: params => `<b>${memSorted[params[0].dataIndex].name}</b><br/>内存: ${params[0].value}%`
+        },
+        grid: { left: 10, right: 40, top: 10, bottom: 5, containLabel: true },
+        xAxis: {
+          type: 'value', max: 100,
+          axisLabel: { color: textColor, fontSize: 10, formatter: '{value}%' },
+          splitLine: { lineStyle: { color: gridColor, type: 'dashed' } }
+        },
+        yAxis: {
+          type: 'category', data: memNames, inverse: true,
+          axisLabel: { color: textColor, fontSize: 10 },
+          axisLine: { lineStyle: { color: gridColor } }
+        },
+        series: [{
+          type: 'bar', data: memData,
+          itemStyle: {
+            color: params => {
+              const val = params.value;
+              if (val > 80) return '#ef4444';
+              if (val > 60) return '#f59e0b';
+              return '#10b981';
+            },
+            borderRadius: [0, 4, 4, 0]
+          },
+          label: {
+            show: true, position: 'right', color: textColor,
+            fontSize: 10, formatter: '{c}%'
+          }
+        }]
+      }, true);
+
+      // Resource Distribution Pie
+      const resourcePie = this._chart('resourcePie');
+      const cpuNodeCount = this.nodes.filter(n => !n.is_gpu).length;
+      const gpuNodeCount = this.nodes.filter(n => n.is_gpu).length;
+      const highCpuCount = this.nodes.filter(n => n.cpu_percent > 80).length;
+      const highMemCount = this.nodes.filter(n => n.mem_percent > 80).length;
+
+      resourcePie.setOption({
+        tooltip: {
+          trigger: 'item',
+          backgroundColor: isDark ? '#1e1e2e' : '#fff', borderColor: gridColor,
+          textStyle: { color: textColor, fontSize: 11 },
+          formatter: '{b}: {c} ({d}%)'
+        },
+        legend: {
+          orient: 'vertical', right: 10, top: 'center',
+          textStyle: { color: textColor, fontSize: 10 }
+        },
+        series: [
+          {
+            type: 'pie', radius: ['40%', '70%'], center: ['40%', '50%'],
+            data: [
+              { value: cpuNodeCount, name: 'CPU 节点', itemStyle: { color: '#3b82f6' } },
+              { value: gpuNodeCount, name: 'GPU 节点', itemStyle: { color: '#8b5cf6' } }
+            ],
+            label: { color: textColor, fontSize: 10 },
+            emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0, 0, 0, 0.5)' } }
+          }
+        ]
+      }, true);
+
+      Object.values(this._charts).forEach(c => c && c.resize());
+    }
+  }
+}
+</script>
+{{end}}
+{{end}}

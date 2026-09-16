@@ -1,0 +1,48 @@
+{{define "title"}}Services - {{.Content.Cluster.DisplayName}} - Sailor{{end}}
+{{define "page_title"}}Services{{end}}
+{{define "breadcrumb"}}<li><a href="/clusters/{{.Content.Cluster.ID}}/">{{.Content.Cluster.DisplayName}}</a></li><li>Services</li>{{end}}
+{{define "resource_icon"}}network-wired{{end}}
+{{define "resource_title"}}Services{{end}}
+
+{{define "extra_actions"}}
+<button class="btn btn-primary btn-sm gap-1.5 h-8 min-h-0 text-xs" onclick="openYamlCreate('service', '{{.Content.ApplyURL}}')">
+  <i class="fas fa-plus text-[10px]"></i> 新建
+</button>
+{{end}}
+
+{{define "table_headers"}}
+<th class="font-semibold text-xs">名称</th>
+<th class="font-semibold text-xs">命名空间</th>
+<th class="font-semibold text-xs">类型</th>
+<th class="font-semibold text-xs">Cluster IP</th>
+<th class="font-semibold text-xs">端口</th>
+<th class="font-semibold text-xs">Age</th>
+<th class="font-semibold text-xs">操作</th>
+{{end}}
+
+{{define "table_row"}}
+<tr class="hover:bg-base-200/50 border-b border-base-300/50">
+  <td class="font-mono text-xs font-medium" x-text="r.name"></td>
+  <td class="whitespace-nowrap"><span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-violet-500/10 border border-violet-500/20 text-[11px] font-medium text-violet-400"><span class="w-1.5 h-1.5 rounded-full bg-violet-400"></span><span x-text="r.namespace"></span></span></td>
+  <td>
+    <span class="badge badge-xs" :class="r.type == 'LoadBalancer' ? 'badge-primary' : r.type == 'NodePort' ? 'badge-info' : 'badge-ghost'" x-text="r.type"></span>
+  </td>
+  <td class="text-xs font-mono opacity-70" x-text="r.cluster_ip"></td>
+  <td class="text-xs opacity-70 max-w-56 truncate" :title="r.ports" x-text="r.ports"></td>
+  <td class="font-medium text-xs text-primary" x-text="r.age"></td>
+  <td>
+    <div class="row-actions">
+      <button type="button" class="row-action" title="详情" @click="$dispatch('open-service-describe', {pk: {{.Content.Cluster.ID}}, namespace: r.namespace, name: r.name})">
+        <i class="fas fa-info-circle"></i>
+      </button>
+      <button type="button" class="row-action" title="YAML" @click="openYaml('Service: ' + r.name, '/resources/{{.Content.Cluster.ID}}/yaml/service/' + r.namespace + '/' + r.name + '/', true)">
+        <i class="fas fa-file-code"></i>
+      </button>
+      <span class="row-action-sep"></span>
+      <button type="button" class="row-action is-danger" title="删除" @click="$dispatch('open-delete-modal', {type: 'Service', name: r.name, namespace: r.namespace, deleteUrl: '/resources/{{.Content.Cluster.ID}}/delete/service/' + r.namespace + '/' + r.name + '/'})">
+        <i class="fas fa-trash-alt"></i>
+      </button>
+    </div>
+  </td>
+</tr>
+{{end}}

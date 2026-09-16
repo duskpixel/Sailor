@@ -1,0 +1,451 @@
+/* ============================================================
+   Armada FX — 视觉层
+   设计语言移植自 best-resume（web/src/style.css），保留其：
+     · 分层 token（fx-a1/a2/a3 光晕、hair 发丝线、三档阴影）
+     · 两条缓动曲线（spring 回弹 / out-soft 缓出）
+     · 玻璃拟态 + 发丝边 + 阴影托层次的组合
+     · 持续动效为主、交互动效为辅的取向
+   差异：Armada 是 DaisyUI v5 + Django 模板，没有 @theme/html.dark，
+   因此 token 桥接到 DaisyUI 的 --color-* 上，主题跟随 [data-theme]。
+
+   ⚠️ 层叠陷阱：本文件无 @layer，优先级高于 Tailwind 的 @layer utilities。
+   绝不能在这里给 nav / aside / main 设 position，会压掉 .fixed 导致整页塌陷。
+   背景层一律用负 z-index 沉底。
+   ============================================================ */
+
+/* ---------- 0. token 桥接 ---------- */
+:root {
+  /* 缓动：spring 用于交互回弹，out-soft 用于展开/淡出 */
+  --ease-spring: cubic-bezier(0.22, 1.4, 0.36, 1);
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* 发丝线：亮底上边框太弱撑不起层次，配合阴影一起用 */
+  --hair: color-mix(in oklab, var(--color-base-content) 13%, transparent);
+  --hair-2: color-mix(in oklab, var(--color-base-content) 26%, transparent);
+
+  /* 三档阴影，对应 静置 / 浮起 / 弹层 */
+  --shadow-card: 0 1px 2px color-mix(in oklab, var(--color-base-content) 5%, transparent),
+                 0 8px 24px color-mix(in oklab, var(--color-base-content) 7%, transparent);
+  --shadow-lift: 0 2px 8px color-mix(in oklab, var(--color-base-content) 8%, transparent),
+                 0 20px 48px color-mix(in oklab, var(--color-base-content) 15%, transparent);
+  --shadow-brand: 0 6px 20px color-mix(in oklab, var(--color-primary) 28%, transparent);
+
+  /* 背景光晕三色 + 网格 + 流光 */
+  --fx-a1: color-mix(in oklab, var(--color-primary) 30%, transparent);
+  --fx-a2: color-mix(in oklab, var(--color-info) 26%, transparent);
+  --fx-a3: color-mix(in oklab, var(--color-secondary) 20%, transparent);
+  --fx-grid: color-mix(in oklab, var(--color-base-content) 6%, transparent);
+  --fx-sheen: color-mix(in oklab, white 62%, transparent);
+}
+
+[data-theme='dark'] {
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 30%), 0 10px 30px oklch(0 0 0 / 34%);
+  --shadow-lift: 0 2px 8px oklch(0 0 0 / 36%), 0 22px 54px oklch(0 0 0 / 46%);
+  --fx-grid: color-mix(in oklab, white 5%, transparent);
+  --fx-sheen: color-mix(in oklab, white 30%, transparent);
+}
+
+/* 亮色主题单独收一轮：
+   · 光斑大幅降饱和 —— 深底吃得住浓彩，白底上 30% 的光斑会把整个内容区
+     泡成"棉花糖"，压到 10% 上下只剩一层氛围；
+   · 阴影比暗色收敛得多，靠发丝边 + 浅阴影分层（重阴影在白底上显脏）；
+   · 纯装饰光效（数字微光、激活项辉光）在白底上只会显灰，直接关掉。 */
+[data-theme='light'] {
+  --fx-a1: color-mix(in oklab, var(--color-primary) 11%, transparent);
+  --fx-a2: color-mix(in oklab, var(--color-info) 10%, transparent);
+  --fx-a3: color-mix(in oklab, var(--color-secondary) 8%, transparent);
+  --fx-grid: color-mix(in oklab, var(--color-base-content) 4.5%, transparent);
+  --shadow-card: 0 1px 2px oklch(0 0 0 / 4%), 0 8px 24px oklch(0 0 0 / 7%);
+  --shadow-lift: 0 2px 8px oklch(0 0 0 / 8%), 0 20px 48px oklch(0 0 0 / 14%);
+}
+
+[data-theme='light'] .fx-metric { text-shadow: none; }
+
+[data-theme='light'] .sidebar-nav-item.active::before { box-shadow: none; }
+
+[data-theme='light'] .fx-card-glow::after {
+  background: radial-gradient(
+    240px circle at var(--fx-mx, 50%) var(--fx-my, 50%),
+    color-mix(in oklab, var(--color-primary) 9%, transparent),
+    transparent 62%
+  );
+}
+
+/* conic-gradient 的角度必须注册成带类型的自定义属性，否则只会跳变不会补间 */
+@property --fx-angle {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+
+/* ---------- 1. 背景动效层 ---------- */
+/* 底色移到 html：body 若保留不透明底色会盖住负 z-index 的背景层 */
+html { background: var(--color-base-200); }
+body { background: transparent; }
+
+.fx-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* 光斑由 GSAP 驱动漂移（见 sailor-fx.js）：每团独立随机时长，
+   避免 CSS keyframes 那种整组同频摆动的钟摆感 */
+.fx-blob {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(58px);
+  will-change: transform;
+}
+
+.fx-grid-layer {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--fx-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--fx-grid) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 78%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 20%, transparent 78%);
+}
+
+/* ---------- 2. 玻璃容器 ---------- */
+.fx-glass {
+  background: color-mix(in oklab, var(--color-base-100) 74%, transparent);
+  border-color: var(--hair);
+  backdrop-filter: blur(18px) saturate(1.4);
+  -webkit-backdrop-filter: blur(18px) saturate(1.4);
+}
+
+.fx-glass-strong {
+  background: color-mix(in oklab, var(--color-base-100) 88%, transparent);
+  backdrop-filter: blur(26px) saturate(1.5);
+  -webkit-backdrop-filter: blur(26px) saturate(1.5);
+}
+
+/* ---------- 3. 卡片 ---------- */
+.fx-card {
+  position: relative;
+  border-color: var(--hair);
+  box-shadow: var(--shadow-card);
+  transition:
+    border-color 0.2s,
+    box-shadow 0.24s,
+    transform 0.24s var(--ease-spring);
+}
+
+.fx-card:hover {
+  border-color: var(--hair-2);
+  box-shadow: var(--shadow-lift);
+  transform: translateY(-2px);
+}
+
+/* 鼠标跟随柔光。坐标由 JS 写入 --fx-mx / --fx-my */
+.fx-card-glow { overflow: hidden; isolation: isolate; }
+
+.fx-card-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: radial-gradient(
+    240px circle at var(--fx-mx, 50%) var(--fx-my, 50%),
+    color-mix(in oklab, var(--color-primary) 15%, transparent),
+    transparent 62%
+  );
+}
+
+.fx-card-glow:hover::after { opacity: 1; }
+
+/* 3D 倾斜：JS 只写变量，transform 在这里统一合成，
+   避免和其它补间抢同一个属性 */
+.fx-tilt {
+  transform: perspective(900px) rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg))
+             translateY(var(--tz, 0px));
+  transform-style: preserve-3d;
+}
+
+/* ---------- 4. 光沿边框游走 ---------- */
+.fx-edge { position: relative; isolation: isolate; }
+
+.fx-edge::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  padding: 1px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background: conic-gradient(
+    from var(--fx-angle),
+    transparent 0%,
+    var(--color-primary) 12%,
+    var(--color-secondary) 22%,
+    transparent 34%
+  );
+  /* 只留边框那一圈：外层填满、内层挖空 */
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  -webkit-mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: fxEdge 3.4s linear infinite;
+}
+
+.fx-edge:hover::before,
+.fx-edge.on::before { opacity: 1; }
+
+@keyframes fxEdge { to { --fx-angle: 360deg; } }
+
+/* ---------- 5. 渐变流动文字 ---------- */
+.fx-flow {
+  background: linear-gradient(
+    100deg,
+    var(--color-primary),
+    var(--color-info),
+    var(--color-secondary),
+    var(--color-primary)
+  );
+  background-size: 320% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: fxFlow 8s linear infinite;
+}
+
+@keyframes fxFlow { to { background-position: 320% 0; } }
+
+/* SplitText 拆出的字符：inline-block 才吃 transform，pre 保住空格 */
+.fx-char {
+  display: inline-block;
+  white-space: pre;
+  will-change: transform, opacity;
+}
+
+/* ---------- 6. 状态点脉冲 ---------- */
+.fx-pulse { position: relative; }
+
+.fx-pulse::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  pointer-events: none;
+  animation: fxPulse 2.1s var(--ease-out-soft) infinite;
+}
+
+@keyframes fxPulse {
+  from { transform: scale(1); opacity: 0.55; }
+  to   { transform: scale(2.6); opacity: 0; }
+}
+
+/* ---------- 7. 点击水波纹 ---------- */
+/* 宿主需 position:relative + overflow:hidden */
+.fx-wave {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(
+    circle,
+    color-mix(in oklab, var(--color-primary) 42%, transparent),
+    transparent 70%
+  );
+  animation: fxWave 0.66s var(--ease-out-soft) forwards;
+}
+
+@keyframes fxWave {
+  to { transform: translate(-50%, -50%) scale(18); opacity: 0; }
+}
+
+/* ---------- 8. 表格行 ---------- */
+.fx-table tbody tr {
+  transition: background-color 0.16s ease;
+}
+
+.fx-table tbody tr td:first-child { position: relative; }
+
+.fx-table tbody tr td:first-child::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 8%;
+  bottom: 8%;
+  width: 2px;
+  border-radius: 0 2px 2px 0;
+  background: var(--color-primary);
+  transform: scaleY(0);
+  transition: transform 0.2s var(--ease-out-soft);
+}
+
+.fx-table tbody tr:hover td:first-child::before { transform: scaleY(1); }
+
+.fx-table tbody tr:hover {
+  background: color-mix(in oklab, var(--color-primary) 7%, transparent) !important;
+}
+
+/* ---------- 9. 侧边栏 ---------- */
+.sidebar-nav-item { position: relative; }
+
+.sidebar-nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 20%;
+  bottom: 20%;
+  width: 2.5px;
+  border-radius: 0 3px 3px 0;
+  background: var(--color-primary);
+  box-shadow: 0 0 10px var(--color-primary);
+  animation: fxGlow 2.4s var(--ease-out-soft) infinite;
+}
+
+@keyframes fxGlow {
+  0%, 100% { opacity: 0.65; }
+  50%      { opacity: 1; }
+}
+
+.sidebar-nav-item .sidebar-nav-icon {
+  transition: transform 0.2s var(--ease-spring);
+}
+.sidebar-nav-item:hover .sidebar-nav-icon { transform: scale(1.16); }
+
+/* ---------- 10. 品牌 logo ---------- */
+/* 品牌标志用固定的"梦幻渐变"（淡紫→粉→天青→蓝紫）：品牌色不属于任何
+   主题语义，是设计系统里唯一允许脱离 token 的固定色值例外，
+   两套主题下保持同一观感。缓慢流动 + ease-in-out 是"梦幻感"的关键。 */
+.fx-logo {
+  background: linear-gradient(
+    135deg,
+    #c4b5fd,
+    #f0abfc,
+    #7dd3fc,
+    #818cf8,
+    #c4b5fd
+  );
+  background-size: 300% 300%;
+  animation: fxLogoFlow 10s ease-in-out infinite;
+}
+
+@keyframes fxLogoFlow {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* ---------- 11. 进度条流光 ---------- */
+.fx-bar { position: relative; overflow: hidden; }
+
+.fx-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(100deg, transparent 20%, var(--fx-sheen) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: fxSheen 2.6s var(--ease-out-soft) infinite;
+}
+
+@keyframes fxSheen {
+  0%       { transform: translateX(-100%); }
+  60%,100% { transform: translateX(220%); }
+}
+
+/* 数字微光 */
+.fx-metric { text-shadow: 0 0 18px color-mix(in oklab, currentColor 30%, transparent); }
+
+/* ---------- 12. 按钮光泽 ---------- */
+.fx-btn { position: relative; overflow: hidden; }
+
+.fx-btn::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, var(--fx-sheen), transparent);
+  transition: left 0.55s var(--ease-out-soft);
+}
+
+.fx-btn:hover::before { left: 130%; }
+
+/* ---------- 13. 骨架屏 ---------- */
+.fx-skeleton {
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklab, var(--color-base-content) 6%, transparent) 25%,
+    color-mix(in oklab, var(--color-base-content) 13%, transparent) 50%,
+    color-mix(in oklab, var(--color-base-content) 6%, transparent) 75%
+  );
+  background-size: 220% 100%;
+  animation: fxShimmer 1.5s linear infinite;
+  border-radius: 8px;
+}
+
+@keyframes fxShimmer {
+  0%   { background-position: 130% 0; }
+  100% { background-position: -30% 0; }
+}
+
+/* ---------- 14. 入场 ---------- */
+.fx-rise { animation: fxRise 0.45s var(--ease-out-soft) both; }
+
+@keyframes fxRise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.fx-stagger > * { animation: fxRise 0.45s var(--ease-out-soft) both; }
+.fx-stagger > *:nth-child(1) { animation-delay: 0.02s; }
+.fx-stagger > *:nth-child(2) { animation-delay: 0.07s; }
+.fx-stagger > *:nth-child(3) { animation-delay: 0.12s; }
+.fx-stagger > *:nth-child(4) { animation-delay: 0.17s; }
+.fx-stagger > *:nth-child(5) { animation-delay: 0.22s; }
+.fx-stagger > *:nth-child(6) { animation-delay: 0.27s; }
+
+/* ---------- 15. 顶栏滚动阴影 ---------- */
+nav.fx-nav-scrolled { box-shadow: var(--shadow-card); }
+
+/* ---------- 16. 点击火花 ---------- */
+/* 挂在 body 上用 fixed，宿主 overflow:hidden 也不会裁掉 */
+.fx-spark {
+  position: fixed;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ============================================================
+   减少动效：常驻动画全停，保留 hover 反馈（那是交互必需的信息）
+   ============================================================ */
+@media (prefers-reduced-motion: reduce) {
+  .fx-blob,
+  .fx-bar::after,
+  .fx-pulse::before,
+  .fx-logo,
+  .fx-flow,
+  .fx-edge::before,
+  .sidebar-nav-item.active::before,
+  .fx-skeleton,
+  .fx-rise,
+  .fx-stagger > * { animation: none; }
+
+  .fx-flow { background: none; color: inherit; }
+  .fx-bar::after { display: none; }
+
+  .fx-card,
+  .fx-card-glow::after,
+  .fx-table tbody tr,
+  .fx-table tbody tr td:first-child::before,
+  .sidebar-nav-item .sidebar-nav-icon,
+  .fx-btn::before { transition-duration: 0.01ms; }
+
+  .fx-card:hover { transform: none; }
+}
