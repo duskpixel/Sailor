@@ -419,11 +419,40 @@
   <script src="/static/js/gsap.min.js"></script>
   <script src="/static/js/sailor-fx.js"></script>
   <script src="/static/js/vue-bits.js"></script>
-  {{/* xterm 需要先把 define 藏起来再加载，避免与 Monaco 的 AMD loader 撞车（详见 resource_modals 注释）。 */}}
-  <script>window.__armadaDefine = window.define; window.define = undefined;</script>
-  <script src="/static/js/xterm.js"></script>
-  <script src="/static/js/xterm-addon-fit.js"></script>
-  <script>window.define = window.__armadaDefine; delete window.__armadaDefine;</script>
+  {{/* xterm（283K）懒加载：只有终端（kubectl 抽屉 / 容器终端）需要它，
+       整页跳转的应用不该在每次导航都重新解析。动态注入时同样要先藏起
+       define，避免与 Monaco 的 AMD loader 撞车（见 resource_modals 注释）；
+       全局共享同一个 Promise，多入口只加载一次。 */}}
+  <script>
+  window.__loadXterm = (function () {
+    var p = null;
+    return function () {
+      if (p) return p;
+      p = new Promise(function (resolve, reject) {
+        if (window.Terminal && window.FitAddon) return resolve();
+        var saved = window.define;
+        window.define = undefined;
+        var main = document.createElement('script');
+        var fit = document.createElement('script');
+        main.src = '/static/js/xterm.js';
+        fit.src = '/static/js/xterm-addon-fit.js';
+        main.onerror = fit.onerror = function () {
+          p = null;
+          window.define = saved;
+          reject(new Error('终端组件加载失败'));
+        };
+        main.onload = function () { document.head.appendChild(fit); };
+        fit.onload = function () {
+          window.define = saved;
+          if (window.Terminal && window.FitAddon) resolve();
+          else { p = null; reject(new Error('终端组件不完整')); }
+        };
+        document.head.appendChild(main);
+      });
+      return p;
+    };
+  })();
+  </script>
   {{template "toast" .}}
   {{template "ksh_drawer" .}}
   {{block "extra_js" .}}{{end}}

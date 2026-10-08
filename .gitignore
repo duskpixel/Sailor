@@ -31,3 +31,6 @@ db.sqlite3
 # ---- Go build artifacts ----
 preview
 sailor-preview
+
+# impeccable 技能本地副本（会话工具生成，不入库）
+/.agents/

@@ -1887,12 +1887,17 @@ function podExecTerminal() {
     },
 
     _boot() {
-      if (!window.Terminal) {
+      // xterm 懒加载（283K，仅终端场景需要）；组件就绪后再建终端与连接
+      window.__loadXterm().catch(e => {
         this.starting = false;
-        this.error = '终端组件未加载（static/js/xterm.js）';
-        return;
-      }
-      const term = new window.Terminal({
+        this.error = (e && e.message) || '终端组件加载失败';
+      }).then(() => {
+        if (!window.Terminal) {
+          this.starting = false;
+          this.error = '终端组件未加载（static/js/xterm.js）';
+          return;
+        }
+        const term = new window.Terminal({
         cursorBlink: true,
         fontSize: 12.5,
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -1932,6 +1937,7 @@ function podExecTerminal() {
       }).catch(e => {
         this.starting = false;
         this.error = e.message;
+      });
       });
     },
 

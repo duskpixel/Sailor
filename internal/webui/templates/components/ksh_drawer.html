@@ -72,7 +72,7 @@ function kshTerminal() {
     clusterId: 0, cluster: '', session: '',
     connected: false, starting: false, reconnecting: false, error: null,
     expanded: true, visible: false, height: 300, dragging: false, themeNow: 'dark',
-    _term: null, _fit: null, _ws: null, _onResize: null, _closing: false, _retryTimer: null, _themeObserver: null,
+    _term: null, _fit: null, _ws: null, _onResize: null, _termPromise: null, _closing: false, _retryTimer: null, _themeObserver: null,
 
     // 两套终端配色（背景/前景/光标 + 16 色 ANSI 调色板）：暗色沿用 Ayu 系
     // （现有观感），亮色对齐应用亮色主题的白底深字 + 青色光标。Go 侧提示符
@@ -293,36 +293,43 @@ function kshTerminal() {
       }));
     },
 
+    // 终端组件按需懒加载（283K 的 xterm 不该随每页解析）；就绪前不开 WS，
+    // 保证服务端回放的第一帧一定有终端可写
     _ensureTerm() {
-      if (this._term || !window.Terminal) {
-        if (!window.Terminal) {
-          this.starting = false;
-          this.error = '终端组件未加载（static/js/xterm.js）';
+      if (this._term) return Promise.resolve();
+      if (this._termPromise) return this._termPromise;
+      this._termPromise = window.__loadXterm().then(() => {
+        this._termPromise = null;
+        // 防重入：_connect 会 teardown 后重调本方法，加载完成时以先建好的为准
+        if (this._term || !this.visible || this._closing) return;
+        const term = new window.Terminal({
+          cursorBlink: true,
+          fontSize: 12.5,
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          scrollback: 5000,
+          // kubectl 输出只有 \n；不转换的话表格会阶梯错位
+          convertEol: true,
+          theme: this._termTheme(),
+        });
+        this._term = term;
+        term.open(this.$refs.term);
+        if (window.FitAddon) {
+          this._fit = new window.FitAddon.FitAddon();
+          term.loadAddon(this._fit);
+          this._fit.fit();
         }
-        return;
-      }
-      const term = new window.Terminal({
-        cursorBlink: true,
-        fontSize: 12.5,
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-        scrollback: 5000,
-        // kubectl 输出只有 \n；不转换的话表格会阶梯错位
-        convertEol: true,
-        theme: this._termTheme(),
+        // 回显由 Go 侧行编辑器负责，前端只透传键击
+        term.onData(d => {
+          if (this._ws && this._ws.readyState === WebSocket.OPEN) this._ws.send(new TextEncoder().encode(d));
+        });
+        this._onResize = () => this._refit();
+        window.addEventListener('resize', this._onResize);
+      }).catch(e => {
+        this._termPromise = null;
+        this.starting = false;
+        this.error = '终端组件未加载：' + (e && e.message || e);
       });
-      this._term = term;
-      term.open(this.$refs.term);
-      if (window.FitAddon) {
-        this._fit = new window.FitAddon.FitAddon();
-        term.loadAddon(this._fit);
-        this._fit.fit();
-      }
-      // 回显由 Go 侧行编辑器负责，前端只透传键击
-      term.onData(d => {
-        if (this._ws && this._ws.readyState === WebSocket.OPEN) this._ws.send(new TextEncoder().encode(d));
-      });
-      this._onResize = () => this._refit();
-      window.addEventListener('resize', this._onResize);
+      return this._termPromise;
     },
 
     // 展开动画结束后 xterm 需要重新计算行列
@@ -334,46 +341,49 @@ function kshTerminal() {
     },
 
     _connect(wsUrl) {
-      // 重连一律换新 xterm：服务端会整段回放滚动缓冲，旧实例上会重复
+      // 重连一律换新 xterm：服务端会整段回放滚动缓冲，旧实例上会重复。
+      // 先等终端组件就绪再拨号，回放帧才有落点。
       this._teardownTerm();
-      this._ensureTerm();
-      const ws = new WebSocket(wsUrl);
-      ws.binaryType = 'arraybuffer';
-      this._ws = ws;
-      ws.onopen = () => {
-        this.starting = false;
-        this.reconnecting = false;
-        this.connected = true;
-        if (this._term && this.expanded) this._term.focus();
-      };
-      ws.onmessage = (ev) => {
-        if (ev.data instanceof ArrayBuffer || ev.data instanceof Uint8Array) {
-          if (this._term) this._term.write(ev.data instanceof ArrayBuffer ? new Uint8Array(ev.data) : ev.data);
-          return;
-        }
-        try {
-          const msg = JSON.parse(ev.data);
-          if (msg.type === 'exit') this._onEnded();
-        } catch (e) { /* 忽略无法解析的控制帧 */ }
-      };
-      ws.onerror = () => {
-        if (!this.connected) {
+      this._ensureTerm().then(() => {
+        if (this._closing || !this.session) return;
+        const ws = new WebSocket(wsUrl);
+        ws.binaryType = 'arraybuffer';
+        this._ws = ws;
+        ws.onopen = () => {
           this.starting = false;
           this.reconnecting = false;
-          this.error = '无法连接终端网关';
-        }
-      };
-      ws.onclose = () => {
-        this._ws = null;
-        this.connected = false;
-        if (this._closing || !this.session) return;
-        // 意外断开：1.5s 后自动 attach 一次（一次就好，失败停在错误态）
-        if (this._retryTimer) return;
-        this._retryTimer = setTimeout(() => {
-          this._retryTimer = null;
-          if (this.session && !this.connected && !this._closing) this._attach();
-        }, 1500);
-      };
+          this.connected = true;
+          if (this._term && this.expanded) this._term.focus();
+        };
+        ws.onmessage = (ev) => {
+          if (ev.data instanceof ArrayBuffer || ev.data instanceof Uint8Array) {
+            if (this._term) this._term.write(ev.data instanceof ArrayBuffer ? new Uint8Array(ev.data) : ev.data);
+            return;
+          }
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg.type === 'exit') this._onEnded();
+          } catch (e) { /* 忽略无法解析的控制帧 */ }
+        };
+        ws.onerror = () => {
+          if (!this.connected) {
+            this.starting = false;
+            this.reconnecting = false;
+            this.error = '无法连接终端网关';
+          }
+        };
+        ws.onclose = () => {
+          this._ws = null;
+          this.connected = false;
+          if (this._closing || !this.session) return;
+          // 意外断开：1.5s 后自动 attach 一次（一次就好，失败停在错误态）
+          if (this._retryTimer) return;
+          this._retryTimer = setTimeout(() => {
+            this._retryTimer = null;
+            if (this.session && !this.connected && !this._closing) this._attach();
+          }, 1500);
+        };
+      });
     },
 
     _onEnded() {
@@ -396,6 +406,7 @@ function kshTerminal() {
       }
       if (this._term) { this._term.dispose(); this._term = null; }
       this._fit = null;
+      this._termPromise = null;
     },
   };
 }
