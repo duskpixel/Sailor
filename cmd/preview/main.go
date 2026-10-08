@@ -13,6 +13,7 @@ import (
 
 	"sailor/internal/execsess"
 	"sailor/internal/k8sx"
+	"sailor/internal/ksh"
 	"sailor/internal/store"
 	"sailor/internal/syncer"
 	"sailor/internal/webui"
@@ -55,11 +56,16 @@ func main() {
 	webui.RegisterPages(tpl)
 
 	pool := k8sx.NewPool()
+	kshMgr := ksh.NewManager()
+	if _, err := kshMgr.Start(); err != nil {
+		log.Fatal(err)
+	}
 	srv := &webui.Server{
 		Store:   st,
 		Pool:    pool,
 		Syncer:  syncer.New(st, pool),
 		Exec:    execsess.NewManager(pool, st),
+		Ksh:     kshMgr,
 		Tpl:     tpl,
 		Assets:  staticFS,
 		Version: "preview",
@@ -67,6 +73,9 @@ func main() {
 	}
 
 	addr := "127.0.0.1:8787"
+	if p := os.Getenv("PREVIEW_PORT"); p != "" {
+		addr = "127.0.0.1:" + p
+	}
 	fmt.Println("预览地址: http://" + addr + "  (数据目录: " + dir + ")")
 	// 静态资源禁缓存：调样式时改完刷新即可见，不用跟浏览器启发式缓存较劲。
 	log.Fatal(http.ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

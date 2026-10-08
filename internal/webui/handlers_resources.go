@@ -775,3 +775,22 @@ func (s *Server) podExecClose(w http.ResponseWriter, r *http.Request) {
 	// 会话生命周期由 WS 连接断开与空闲回收兜底；保留端点维持前端兼容
 	JSON(w, 200, map[string]interface{}{"success": true})
 }
+
+// kshOpen 打开内置 kubectl 终端会话（返回一次性 token 的 WS 地址）。
+func (s *Server) kshOpen(w http.ResponseWriter, r *http.Request) {
+	c, loader, ok := s.clusterCtx(w, r, r.PathValue("id"))
+	if !ok {
+		return
+	}
+	info, status, err := s.Ksh.Open(c.ID, c.Display(), loader)
+	if err != nil {
+		JSONError(w, status, err.Error())
+		return
+	}
+	JSON(w, 200, map[string]interface{}{
+		"success": true,
+		"session": info.Session,
+		"cluster": info.Cluster,
+		"ws_url":  info.WSTemplate,
+	})
+}

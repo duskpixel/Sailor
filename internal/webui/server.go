@@ -11,10 +11,11 @@ import (
 	"strings"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sailor/internal/execsess"
 	"sailor/internal/k8sx"
+	"sailor/internal/ksh"
 	"sailor/internal/metrics"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"sailor/internal/resops"
 	"sailor/internal/store"
@@ -28,6 +29,7 @@ type Server struct {
 	Syncer  *syncer.Manager
 	Agg     *metrics.Aggregator
 	Exec    *execsess.Manager
+	Ksh     *ksh.Manager
 	Tpl     *Renderer
 	Assets  fs.FS // 可选：静态资源（供独立测试；Wails 里由 asset server 直接服务）
 	WSPort  int
@@ -102,6 +104,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /resources/{id}/pods/{ns}/{pod}/logs/{$}", s.podLogsAPI)
 	mux.HandleFunc("POST /resources/{id}/pods/{ns}/{pod}/exec/open/{$}", s.podExecOpen)
 	mux.HandleFunc("POST /resources/{id}/pods/{ns}/{pod}/exec/close/{$}", s.podExecClose)
+	mux.HandleFunc("POST /resources/{id}/ksh/open/{$}", s.kshOpen)
 	mux.HandleFunc("GET /resources/{id}/yaml/{kind}/{name}/", s.resourceYAML)      // cluster-scoped
 	mux.HandleFunc("GET /resources/{id}/yaml/{kind}/{ns}/{name}/", s.resourceYAML) // namespaced
 	mux.HandleFunc("POST /resources/{id}/apply/{$}", s.resourceApplyAPI)

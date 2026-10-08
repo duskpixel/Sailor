@@ -14,6 +14,7 @@ import (
 
 	"sailor/internal/execsess"
 	"sailor/internal/k8sx"
+	"sailor/internal/ksh"
 	"sailor/internal/metrics"
 	"sailor/internal/store"
 	"sailor/internal/syncer"
@@ -34,10 +35,15 @@ func main() {
 	pool := k8sx.NewPool()
 	syn := syncer.New(st, pool)
 	execMgr := execsess.NewManager(pool, st)
+	kshMgr := ksh.NewManager()
 	agg := metrics.NewAggregator(pool)
 	wsPort, err := execMgr.Start()
 	if err != nil {
 		log.Fatalf("启动终端网关失败: %v", err)
+	}
+	// ksh 网关端口只随 open 响应里的 ws_url 下发给前端，这里不直接使用
+	if _, err := kshMgr.Start(); err != nil {
+		log.Fatalf("启动 kubectl 终端网关失败: %v", err)
 	}
 
 	// 静态资源：frontend/dist 下的 /static 子树
@@ -61,13 +67,14 @@ func main() {
 		Syncer:  syn,
 		Agg:     agg,
 		Exec:    execMgr,
+		Ksh:     kshMgr,
 		Tpl:     tpl,
 		Assets:  staticFS,
 		WSPort:  wsPort,
 		Version: appVersion,
 	}
 
-	app := NewApp(st, syn, execMgr)
+	app := NewApp(st, syn, execMgr, kshMgr)
 
 	err = wails.Run(&options.App{
 		Title:            "Sailor",

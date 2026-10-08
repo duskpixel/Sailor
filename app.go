@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sailor/internal/execsess"
+	"sailor/internal/ksh"
 	"sailor/internal/macui"
 	"sailor/internal/store"
 	"sailor/internal/syncer"
@@ -17,10 +18,11 @@ type App struct {
 	store  *store.Store
 	syncer *syncer.Manager
 	exec   *execsess.Manager
+	ksh    *ksh.Manager
 }
 
-func NewApp(st *store.Store, syn *syncer.Manager, exec *execsess.Manager) *App {
-	return &App{store: st, syncer: syn, exec: exec}
+func NewApp(st *store.Store, syn *syncer.Manager, exec *execsess.Manager, ksh *ksh.Manager) *App {
+	return &App{store: st, syncer: syn, exec: exec, ksh: ksh}
 }
 
 // startup 对应 Django ResourcesConfig.ready：为已有集群拉起后台同步。
@@ -48,6 +50,7 @@ func (a *App) positionTrafficLights() {
 
 func (a *App) shutdown(ctx context.Context) {
 	a.exec.Stop()
+	a.ksh.Stop()
 }
 
 // Version 暴露给前端（绑定方法 window.go.main.App.Version）。

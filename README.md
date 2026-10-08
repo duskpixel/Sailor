@@ -58,7 +58,7 @@ Pod 日志直接看，容器终端在窗口里开，YAML 在线编辑且提交�
 │  原生窗口 (WKWebView / WebView2)                  │
 │  HTML + Alpine.js + DaisyUI + ECharts + Monaco    │
 │      │ fetch（同源）                               │
-│      │ WebSocket（容器终端，直连本地网关）           │
+│      │ WebSocket（容器终端 / kubectl 终端，直连本地网关）│
 ├──────────────────────────────────────────────────┤
 │  Wails AssetServer Middleware → Go http.ServeMux  │
 │  ├── 页面路由（Go html/template 渲染）             │
@@ -69,10 +69,12 @@ Pod 日志直接看，容器终端在窗口里开，YAML 在线编辑且提交�
 │  ├── syncer   后台同步（60s 周期 + 立即同步）        │
 │  ├── resops   资源操作（scale/rollback/dry-run）    │
 │  ├── execsess 终端会话（remotecommand 桥接）        │
+│  ├── ksh      内置 kubectl 终端（进程内命令树）      │
 │  ├── metrics  指标聚合（Metrics Server 降级链）      │
 │  └── store    本地持久化（文件存储 + AES-GCM 加密）  │
 ├──────────────────────────────────────────────────┤
 │  client-go（dynamic + typed + remotecommand）      │
+│  + k8s.io/kubectl（进程内 kubectl 命令树）          │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -127,6 +129,25 @@ namespace → pod → deployment → service → configmap → secret
 
 会话仍有空闲超时（5 分钟）与总数上限（32 个）兜底。
 
+### 内置 kubectl 终端：进程内命令树
+
+侧栏的「kubectl 终端」给活动集群开一个 REPL：不依赖系统里装没装 kubectl，
+而是把 `k8s.io/kubectl` 的命令树直接链进应用，语法与真 kubectl 完全一致
+（与 client-go 同为 v0.37，无版本错配）。
+
+- kubeconfig 从加密存储物化成会话临时文件（`--kubeconfig` 指定，权限 0600，
+  会话结束即删），**完全不碰 `~/.kube/config` 与 `KUBECONFIG` 环境变量**；
+- Go 侧自带行编辑器（回显 / 退格 / ↑↓ 历史 / Ctrl+C / Ctrl+L），kubectl
+  输出经 WS 直推 xterm.js；
+- 前台命令运行期间，`exec -i` / `apply -f -`（粘贴 YAML 后 Ctrl+D 发 EOF）
+  的键盘输入直通命令 stdin；
+- `edit` / `diff` / `port-forward` / `proxy` / `plugin` 依赖外部进程，
+  在分发前拦截并给出替代提示（`edit` 引导到 YAML 编辑弹窗）；
+- 每条命令的执行包 `recover` 兜底，kubectl 库内部异常不会带崩应用。
+
+会话空闲 15 分钟回收，上限 8 个。Ctrl+C 一律本地取消命令（不转发为远程
+SIGINT），退出交互式 `exec -it` 请输入 `exit`。
+
 ### kubeconfig 加密存储
 
 kubeconfig 用 **AES-256-GCM** 加密后落盘，密钥为数据目录下随机生成的
@@ -172,6 +193,7 @@ kubeconfig 用 **AES-256-GCM** 加密后落盘，密钥为数据目录下随机�
   KEDA 菜单（直链访问时显示引导空态）
 - **诊断**：Pod 日志（tail 行数 / 上次日志 / 3 秒自动刷新）、容器终端、
   容器层卡点 reason 高亮（`ImagePullBackOff` 等）
+- **kubectl 终端**：进程内 kubectl 命令树 REPL，无需本机安装 kubectl
 - **节点**：Cordon / Uncordon / Drain（policy/v1 Eviction）/ 移除
 
 ### 仪表盘

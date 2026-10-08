@@ -206,6 +206,7 @@ func (s *Server) clusterDelete(w http.ResponseWriter, r *http.Request) {
 	s.Syncer.StopForCluster(c.ID)
 	s.Pool.Remove(c.ID)
 	s.Exec.StopCluster(c.ID)
+	s.Ksh.StopCluster(c.ID)
 	name := c.Display()
 	if err := s.Store.DeleteCluster(c.ID); err != nil {
 		redirectWithFlash(w, r, "/clusters/", "删除失败："+err.Error(), "error")

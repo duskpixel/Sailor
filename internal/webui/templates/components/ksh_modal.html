@@ -1,0 +1,188 @@
+{{/* 内置 kubectl 终端（REPL）。挂全局侧栏入口，因此所有页面都要渲染本组件。
+
+协议与容器终端（execModal）一致：open 接口拿一次性 token，xterm.js 直连
+本地 WS 网关，二进制帧走键盘输入/命令输出。区别：kubectl 是行式 REPL，
+回显/历史由 Go 侧行编辑器负责；kubectl 自身输出的 \n 靠 convertEol 兜住
+（xterm 的 LF 不会自动回到行首，否则表格会楼梯化）。 */}}
+{{define "ksh_modal"}}
+<dialog id="kshModal" class="modal" x-data="kshTerminal()"
+        @open-ksh.window="open($event.detail)"
+        @close="teardown()">
+  <div class="modal-box bg-base-100 border border-base-300 shadow-2xl flex flex-col p-0"
+       style="max-width: 1100px; height: 72vh; border-radius: 20px;">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-base-300 flex-shrink-0 bg-base-200/50">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl grid place-items-center shadow-lg bg-primary/20">
+          <i class="fas fa-terminal text-sm text-primary"></i>
+        </div>
+        <div>
+          <span class="font-semibold text-base text-base-content">kubectl 终端</span>
+          <div class="text-xs mt-0.5 opacity-60">
+            <span x-text="cluster || '正在连接集群…'"></span>
+            <span class="ml-1.5 px-1.5 py-0.5 rounded bg-primary/15 text-primary">内置 v0.37</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="flex items-center gap-1.5 text-[11px] px-2 py-1 rounded-lg"
+              :class="connected ? 'bg-success/15 text-success' : 'bg-base-content/10 opacity-60'">
+          <span class="w-1.5 h-1.5 rounded-full" :class="connected ? 'bg-success animate-pulse' : 'bg-base-content/40'"></span>
+          <span x-text="connected ? '已连接' : '已断开'"></span>
+        </span>
+        <button class="btn btn-ghost btn-sm btn-circle h-9 w-9 min-h-0" title="关闭终端"
+                @click="$el.closest('dialog').close()">
+          <i class="fas fa-times text-sm"></i>
+        </button>
+      </div>
+    </div>
+
+    <div class="flex-1 min-h-0 relative bg-[#0b0f14]">
+      <div x-show="starting" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#0b0f14]">
+        <span class="loading loading-spinner loading-md text-primary"></span>
+        <span class="text-xs opacity-50 text-neutral-content">正在启动 kubectl 会话...</span>
+      </div>
+      <div x-show="error" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 px-8 text-center bg-[#0b0f14]">
+        <i class="fas fa-triangle-exclamation text-2xl text-error"></i>
+        <span class="text-xs text-error break-all" x-text="error"></span>
+      </div>
+      <div x-ref="term" class="absolute inset-0 px-3 py-2"></div>
+    </div>
+
+    <div class="flex items-center justify-between px-5 py-2.5 border-t border-base-300 text-[11px] flex-shrink-0 bg-base-200/30 opacity-60">
+      <span>kubectl REPL · 前缀可省略</span>
+      <span>exit 退出 · Ctrl+C 中断当前命令 · 点右上角关闭</span>
+    </div>
+  </div>
+</dialog>
+
+<script>
+// 内置 kubectl 终端。由侧栏 open-ksh 事件触发，detail 带 clusterId。
+// WS 协议与 podExecTerminal 相同；resize 控制帧服务端暂忽略（kubectl 非 TTY 输出）。
+function kshTerminal() {
+  return {
+    clusterId: 0, cluster: '', session: '', connected: false, starting: false, error: null,
+    _term: null, _fit: null, _ws: null, _onResize: null,
+
+    open(detail) {
+      this.clusterId = detail.clusterId;
+      this.cluster = '';
+      this.session = '';
+      this.error = null;
+      this.connected = false;
+      this.starting = true;
+      document.getElementById('kshModal').showModal();
+      this.$nextTick(() => this._boot());
+    },
+
+    _boot() {
+      if (!window.Terminal) {
+        this.starting = false;
+        this.error = '终端组件未加载（static/js/xterm.js）';
+        return;
+      }
+      const term = new window.Terminal({
+        cursorBlink: true,
+        fontSize: 12.5,
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        scrollback: 5000,
+        // kubectl 输出只有 \n；不转换的话表格会阶梯错位
+        convertEol: true,
+        theme: {background: '#0b0f14', foreground: '#d6deeb', cursor: '#7fdbca'},
+      });
+      this._term = term;
+      term.open(this.$refs.term);
+
+      if (window.FitAddon) {
+        this._fit = new window.FitAddon.FitAddon();
+        term.loadAddon(this._fit);
+        this._fit.fit();
+      }
+
+      // 回显由 Go 侧行编辑器负责，前端只透传键击
+      term.onData(d => {
+        if (this._ws && this._ws.readyState === WebSocket.OPEN) this._ws.send(new TextEncoder().encode(d));
+      });
+
+      this._onResize = () => {
+        if (!this._fit || !this._term) return;
+        this._fit.fit();
+      };
+      window.addEventListener('resize', this._onResize);
+
+      fetch(`/resources/${this.clusterId}/ksh/open/`, {
+        method: 'POST',
+        headers: {'X-Requested-With': 'XMLHttpRequest'},
+      }).then(r => r.json().then(d => ({ok: r.ok, data: d})))
+        .then(({ok, data}) => {
+          if (!ok || !data.success) {
+            this.starting = false;
+            this.error = data.error || '无法建立 kubectl 会话';
+            return;
+          }
+          this.cluster = data.cluster || '';
+          this.session = data.session;
+          this._connect(data.ws_url + encodeURIComponent(this.session));
+        }).catch(e => {
+          this.starting = false;
+          this.error = e.message;
+        });
+    },
+
+    _connect(wsUrl) {
+      const ws = new WebSocket(wsUrl);
+      ws.binaryType = 'arraybuffer';
+      this._ws = ws;
+      ws.onopen = () => {
+        this.starting = false;
+        this.connected = true;
+        this._term.focus();
+      };
+      ws.onmessage = (ev) => {
+        if (ev.data instanceof ArrayBuffer || ev.data instanceof Uint8Array) {
+          this._term.write(ev.data instanceof ArrayBuffer ? new Uint8Array(ev.data) : ev.data);
+          return;
+        }
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type === 'exit') this._finish();
+        } catch (e) { /* 忽略无法解析的控制帧 */ }
+      };
+      ws.onerror = () => {
+        if (!this.connected) {
+          this.starting = false;
+          this.error = '无法连接终端网关';
+        }
+      };
+      ws.onclose = () => {
+        this._ws = null;
+        if (this.session) {
+          this.session = '';
+          this.connected = false;
+          if (this._term) this._term.write('\r\n\x1b[33m[会话已结束]\x1b[0m\r\n');
+        }
+      };
+    },
+
+    _finish() {
+      this.connected = false;
+      this.session = '';
+      if (this._ws) { try { this._ws.close(); } catch (e) {} this._ws = null; }
+      if (this._term) this._term.write('\r\n\x1b[33m[会话已结束]\x1b[0m\r\n');
+    },
+
+    teardown() {
+      if (this._ws) { try { this._ws.close(); } catch (e) {} this._ws = null; }
+      if (this._onResize) {
+        window.removeEventListener('resize', this._onResize);
+        this._onResize = null;
+      }
+      if (this._term) { this._term.dispose(); this._term = null; }
+      this._fit = null;
+      this.session = '';
+      this.connected = false;
+      this.starting = false;
+    },
+  };
+}
+</script>
+{{end}}

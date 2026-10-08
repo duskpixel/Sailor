@@ -9,6 +9,7 @@ import (
 
 	"sailor/internal/execsess"
 	"sailor/internal/k8sx"
+	"sailor/internal/ksh"
 	"sailor/internal/store"
 	"sailor/internal/syncer"
 )
@@ -53,6 +54,7 @@ func testServer(t *testing.T) *Server {
 		Pool:    pool,
 		Syncer:  syncer.New(st, pool),
 		Exec:    execsess.NewManager(pool, st),
+		Ksh:     ksh.NewManager(),
 		Tpl:     tpl,
 		Version: "2.0.0-test",
 		WSPort:  9999,

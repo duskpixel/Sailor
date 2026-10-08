@@ -219,6 +219,12 @@
         <i class="sidebar-nav-icon fas fa-layer-group text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">命名空间</span>
       </a>
+      {{/* 内置 kubectl 终端：全局弹窗（ksh_modal），有活动集群才可打开 */}}
+      <a href="{{if .ActiveCluster}}#{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors"
+         {{if .ActiveCluster}}@click.prevent="$dispatch('open-ksh', {clusterId: {{.ActiveCluster.ID}}})"{{end}}>
+        <i class="sidebar-nav-icon fas fa-terminal text-xs w-4 text-center opacity-60"></i>
+        <span class="sidebar-label">kubectl 终端</span>
+      </a>
 
       <!-- Workloads -->
       <div class="mt-4 mb-1 px-3">
@@ -410,6 +416,7 @@
   <script src="/static/js/xterm-addon-fit.js"></script>
   <script>window.define = window.__armadaDefine; delete window.__armadaDefine;</script>
   {{template "toast" .}}
+  {{template "ksh_modal" .}}
   {{block "extra_js" .}}{{end}}
 </body>
 </html>
