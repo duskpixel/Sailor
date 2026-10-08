@@ -485,14 +485,15 @@ function resourceList() {
           let items = data.resources || data.namespaces || [];
           if (data.resources) items = data.resources;
           this.rows = this._mergePendingOps(items);
-          if (!this.nsFilter) {
-            // 优先用后端返回的 ns 全集；否则才退化到从 rows 聚合
-            if (data.resources && Array.isArray(data.namespaces) && data.namespaces.length > 0) {
-              this.namespaces = [...data.namespaces].sort();
-            } else if (this.rows.length > 0) {
-              const nsSet = new Set(this.rows.map(r => r.namespace).filter(Boolean));
-              this.namespaces = [...nsSet].sort();
-            }
+          // 后端返回的 ns 全集（已含筛选中的 ns）：无条件采用 —— 页面带着
+          // 恢复的筛选初次加载时也要把下拉填上，否则选择器会被 x-show 藏掉。
+          // 为空（syncing 空响应）时保持不动；无筛选才退化到从 rows 聚合，
+          // 有筛选时 rows 已被过滤，聚合会把下拉缩成一项。
+          if (data.resources && Array.isArray(data.namespaces) && data.namespaces.length > 0) {
+            this.namespaces = [...data.namespaces].sort();
+          } else if (!this.nsFilter && this.rows.length > 0) {
+            const nsSet = new Set(this.rows.map(r => r.namespace).filter(Boolean));
+            this.namespaces = [...nsSet].sort();
           }
           if (this.page > this.totalPages) this.page = this.totalPages;
           if (this._hasTerminating() || this._hasUnhealthy()) this._startPolling();
