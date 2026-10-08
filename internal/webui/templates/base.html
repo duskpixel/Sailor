@@ -30,6 +30,26 @@
     /* Main content */
     .main-content { transition: margin-left 0.2s ease; }
 
+    /* ── 首帧就位（防侧栏闪烁）─────────────────────────────────
+       整页跳转时 Alpine（defer）挂载晚于首帧：折叠用户会先看到展开态
+       侧栏，再被 Alpine 收起（width 过渡还会播 200ms 动画）＝每次切页
+       闪烁。这里由 <head> 里的同步脚本把折叠态标到 html.sb-closed，
+       CSS 先行应用终态；Alpine 随后挂上的类与这些值完全一致，不会二
+       次跳动。运行时切换由 body x-init 同步维护 sb-closed。 */
+    #topNav { left: 15rem; }
+    .sb-closed #topNav { left: 4rem; }
+    .main-content { margin-left: 15rem; }
+    .sb-closed .main-content { margin-left: 4rem; }
+    .sidebar-toggle { left: 228px; }
+    .sb-closed .sidebar-toggle { left: 52px; rotate: 180deg; }
+    .sb-closed .sidebar { width: 4rem; }
+    .sb-closed .sidebar-label,
+    .sb-closed .sidebar-logo-text,
+    .sb-closed .sidebar-section-title,
+    .sb-closed .sidebar-footer-text { display: none; }
+    .sb-closed .sidebar-nav-item { justify-content: center; padding-left: 0; padding-right: 0; }
+    .sb-closed .sidebar-nav-icon { margin-right: 0; }
+
     /* Card hover - subtle（黑阴影两主题通用：暗色下自然隐形，亮色下也不压卡片） */
     .card { transition: box-shadow 0.15s ease, transform 0.15s ease; }
     .card:hover { box-shadow: 0 4px 12px oklch(0 0 0 / 0.1); }
@@ -102,8 +122,12 @@
     }
   </style>
   {{block "extra_head" .}}{{end}}
+  <script>
+    // 防侧栏闪烁的同步标记：必须在首帧前执行（Alpine 是 defer 的）
+    if (localStorage.getItem('sidebarOpen') === 'false') document.documentElement.classList.add('sb-closed');
+  </script>
 </head>
-<body class="min-h-screen text-base-content" x-data="{ sidebarOpen: localStorage.getItem('sidebarOpen') !== 'false' }" x-init="$watch('sidebarOpen', val => localStorage.setItem('sidebarOpen', val))">
+<body class="min-h-screen text-base-content" x-data="{ sidebarOpen: localStorage.getItem('sidebarOpen') !== 'false' }" x-init="$watch('sidebarOpen', val => { localStorage.setItem('sidebarOpen', val); document.documentElement.classList.toggle('sb-closed', !val) })">
 
   {{/* 背景动效层：光斑由 GSAP 驱动漂移，网格是静态底纹。 */}}
   <div class="fx-bg" aria-hidden="true">
@@ -312,7 +336,7 @@
 
   {{/* 折叠按钮：骑在侧边栏右边框上（垂直居中），随开合平移；箭头方向指示折叠/展开 */}}
   <button @click="sidebarOpen = !sidebarOpen"
-          class="fixed z-50 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-base-100 border border-base-300 shadow flex items-center justify-center text-[10px] text-base-content/60 hover:text-base-content hover:opacity-100 opacity-70 transition-all duration-200"
+          class="sidebar-toggle fixed z-50 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-base-100 border border-base-300 shadow flex items-center justify-center text-[10px] text-base-content/60 hover:text-base-content hover:opacity-100 opacity-70 transition-all duration-200"
           :class="[sidebarOpen ? 'left-[228px]' : 'left-[52px]', sidebarOpen ? '' : 'rotate-180']"
           :title="sidebarOpen ? '收起侧栏' : '展开侧栏'">
     <i class="fas fa-chevron-left transition-transform duration-200"></i>
