@@ -196,6 +196,21 @@ func parseEditArgs(args []string) (kindAlias, name, namespace string, hasNS bool
 	return positionals[0], positionals[1], namespace, hasNS, nil
 }
 
+// editPages kind → 承载 YAML 编辑器的资源列表页路径段（无专属页面的
+// 类型借道 deployments 页——编辑器只关心 YAML 地址，不关心宿主列表）。
+var editPages = map[string]string{
+	"persistentvolumeclaim": "pvcs",
+	"replicaset":            "deployments",
+	"endpoints":             "deployments",
+}
+
+func editPageFor(kind string) string {
+	if p, ok := editPages[kind]; ok {
+		return p
+	}
+	return kind + "s"
+}
+
 // routeEdit 把 kubectl edit 拦截转发到应用内 Monaco YAML 编辑器：
 // 真 edit 靠 $EDITOR 外部进程，内置终端走不了——改用 Sailor 自己的
 // 编辑弹窗（语法高亮 + 真实 dry-run 校验），体验反而更好。
@@ -229,6 +244,7 @@ func (s *Session) routeEdit(args []string) {
 	s.out.sendControl(map[string]string{
 		"type": "yaml-edit", "kind": kind, "name": name,
 		"namespace": namespace, "cluster": s.Cluster,
+		"page": editPageFor(kind),
 	})
 	fmt.Fprintf(s.out, "\x1b[36m已转到 YAML 编辑器：%s %s\x1b[0m\r\n", kind, name)
 	fmt.Fprint(s.out, "在弹窗右上角打开「编辑模式」修改，点「应用到集群」生效（提交前走真实 dry-run 校验）。\r\n")
