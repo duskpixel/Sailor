@@ -79,25 +79,25 @@
       <template x-if="node.schedulable">
         <button class="btn btn-sm btn-outline hover:bg-warning hover:text-warning-content hover:border-warning gap-1.5 h-8 min-h-0 text-xs transition-all" data-vb-spark
           @click="cordonModal.showModal()">
-          <i class="fas fa-ban text-[10px]"></i> Cordon
+          <i class="fas fa-ban text-[10px]"></i> 封锁
         </button>
       </template>
       <template x-if="!node.schedulable">
         <button class="btn btn-sm btn-outline hover:bg-success hover:text-success-content hover:border-success gap-1.5 h-8 min-h-0 text-xs transition-all" data-vb-spark
           @click="uncordonModal.showModal()">
-          <i class="fas fa-check text-[10px]"></i> Uncordon
+          <i class="fas fa-check text-[10px]"></i> 恢复调度
         </button>
       </template>
       <!-- Drain / 已 Drain -->
       <template x-if="!node.drained">
         <button class="btn btn-sm btn-outline hover:bg-warning hover:text-warning-content hover:border-warning gap-1.5 h-8 min-h-0 text-xs transition-all" data-vb-spark
           @click="drainModal.showModal()">
-          <i class="fas fa-water text-[10px]"></i> Drain
+          <i class="fas fa-water text-[10px]"></i> 排空
         </button>
       </template>
       <template x-if="node.drained">
         <span class="badge badge-info badge-outline gap-1.5 h-8 px-3 text-xs">
-          <i class="fas fa-water text-[10px]"></i> 已 Drain
+          <i class="fas fa-water text-[10px]"></i> 已排空
           <span class="opacity-60 text-[10px]" x-show="node.drained_at" x-text="node.drained_at"></span>
         </span>
       </template>
@@ -108,12 +108,12 @@
       <!-- 状态标签 -->
       <template x-if="!node.schedulable && !node.drained">
         <span class="badge badge-warning badge-outline ml-2 gap-1.5 text-[10px] px-2.5 py-1">
-          <i class="fas fa-ban text-[8px]"></i> 已 Cordon（停止调度）
+          <i class="fas fa-ban text-[8px]"></i> 已封锁（停止调度）
         </span>
       </template>
       <template x-if="node.drained">
         <span class="badge badge-info badge-outline ml-2 gap-1.5 text-[10px] px-2.5 py-1">
-          <i class="fas fa-water text-[8px]"></i> 已 Drain（停止调度 + 已驱逐 Pod）
+          <i class="fas fa-water text-[8px]"></i> 已排空（停止调度 + 已驱逐 Pod）
         </span>
       </template>
     </div>
@@ -298,24 +298,24 @@
           <i class="fas fa-ban text-lg text-warning"></i>
         </div>
         <div>
-          <h3 class="font-bold text-base text-warning">Cordon 节点</h3>
+          <h3 class="font-bold text-base text-warning">封锁节点</h3>
           <p class="text-xs opacity-50 mt-0.5">将节点标记为不可调度</p>
         </div>
       </div>
       <div class="space-y-3">
         <div class="bg-warning/5 border border-warning/15 rounded-xl p-4 space-y-3">
-          <p class="text-sm leading-relaxed">确定要 Cordon 节点 <code class="bg-base-200 px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{.Content.NodeName}}</code> 吗？</p>
+          <p class="text-sm leading-relaxed">确定要封锁节点 <code class="bg-base-200 px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{.Content.NodeName}}</code> 吗？</p>
           <div class="text-xs leading-relaxed opacity-70 space-y-1.5">
-            <p><i class="fas fa-info-circle text-warning mr-1.5"></i>Cordon 后，调度器将不再向该节点分配新的 Pod。</p>
+            <p><i class="fas fa-info-circle text-warning mr-1.5"></i>封锁后，调度器将不再向该节点分配新的 Pod。</p>
             <p><i class="fas fa-check-circle text-success mr-1.5"></i>节点上已运行的 Pod 不受影响，会继续正常运行。</p>
-            <p><i class="fas fa-undo text-info mr-1.5"></i>后续可通过 Uncordon 恢复节点调度。</p>
+            <p><i class="fas fa-undo text-info mr-1.5"></i>后续可通过「恢复调度」恢复节点调度。</p>
           </div>
         </div>
       </div>
       <div class="modal-action mt-6 gap-2.5">
         <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="cordonModal.close()">取消</button>
-        <button class="btn btn-warning btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" onclick="nodeAction('/clusters/{{.Content.Cluster.ID}}/node/{{.Content.NodeName}}/cordon/', 'Cordon'); cordonModal.close();">
-          <i class="fas fa-ban text-[10px]"></i> 确认 Cordon
+        <button class="btn btn-warning btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" onclick="nodeAction('/clusters/{{.Content.Cluster.ID}}/node/{{.Content.NodeName}}/cordon/', '封锁'); cordonModal.close();">
+          <i class="fas fa-ban text-[10px]"></i> 确认封锁
         </button>
       </div>
     </div>
@@ -330,22 +330,22 @@
           <i class="fas fa-check-circle text-lg text-success"></i>
         </div>
         <div>
-          <h3 class="font-bold text-base text-success">Uncordon 节点</h3>
+          <h3 class="font-bold text-base text-success">恢复节点调度</h3>
           <p class="text-xs opacity-50 mt-0.5">恢复节点调度</p>
         </div>
       </div>
       <div class="space-y-3">
         <div class="bg-success/5 border border-success/15 rounded-xl p-4 space-y-3">
-          <p class="text-sm leading-relaxed">确定要 Uncordon 节点 <code class="bg-base-200 text-success px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{.Content.NodeName}}</code> 吗？</p>
+          <p class="text-sm leading-relaxed">确定要恢复节点调度 <code class="bg-base-200 text-success px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{.Content.NodeName}}</code> 吗？</p>
           <div class="text-xs leading-relaxed opacity-70 space-y-1.5">
-            <p><i class="fas fa-info-circle text-success mr-1.5"></i>Uncordon 后，调度器将恢复向该节点分配新的 Pod。</p>
+            <p><i class="fas fa-info-circle text-success mr-1.5"></i>恢复调度后，调度器将恢复向该节点分配新的 Pod。</p>
             <p><i class="fas fa-check-circle text-success mr-1.5"></i>节点将重新参与集群的工作负载调度。</p>
           </div>
         </div>
       </div>
       <div class="modal-action mt-6 gap-2.5">
         <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="uncordonModal.close()">取消</button>
-        <button class="btn btn-success btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" onclick="nodeAction('/clusters/{{.Content.Cluster.ID}}/node/{{.Content.NodeName}}/uncordon/', 'Uncordon'); uncordonModal.close();">
+        <button class="btn btn-success btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" onclick="nodeAction('/clusters/{{.Content.Cluster.ID}}/node/{{.Content.NodeName}}/uncordon/', '恢复调度'); uncordonModal.close();">
           <i class="fas fa-check text-[10px]"></i> 确认 Uncordon
         </button>
       </div>
@@ -361,7 +361,7 @@
           <i class="fas fa-water text-lg text-warning"></i>
         </div>
         <div>
-          <h3 class="font-bold text-base text-warning">Drain 节点</h3>
+          <h3 class="font-bold text-base text-warning">排空节点</h3>
           <p class="text-xs opacity-50 mt-0.5">驱逐 Pod 并停止调度</p>
         </div>
       </div>
@@ -373,8 +373,8 @@
       </div>
       <div class="modal-action mt-6 gap-2.5">
         <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="drainModal.close()">取消</button>
-        <button class="btn btn-warning btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" onclick="nodeAction('/clusters/{{.Content.Cluster.ID}}/node/{{.Content.NodeName}}/drain/', 'Drain'); drainModal.close();">
-          <i class="fas fa-water text-[10px]"></i> 确认 Drain
+        <button class="btn btn-warning btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" onclick="nodeAction('/clusters/{{.Content.Cluster.ID}}/node/{{.Content.NodeName}}/drain/', '排空'); drainModal.close();">
+          <i class="fas fa-water text-[10px]"></i> 确认排空
         </button>
       </div>
     </div>
@@ -398,7 +398,7 @@
           <p class="text-sm leading-relaxed">此操作将从集群中移除节点对象 <code class="bg-base-200 text-error px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{.Content.NodeName}}</code>。</p>
           <div class="mt-3 flex items-start gap-2 bg-warning/10 border border-warning/20 rounded-lg p-3">
             <i class="fas fa-info-circle text-warning text-sm mt-0.5 flex-shrink-0"></i>
-            <p class="text-xs leading-relaxed opacity-80">如果节点上的 kubelet 仍在运行，节点可能会自动重新加入集群。建议先执行 Drain 操作。</p>
+            <p class="text-xs leading-relaxed opacity-80">如果节点上的 kubelet 仍在运行，节点可能会自动重新加入集群。建议先执行排空操作。</p>
           </div>
         </div>
         <div>

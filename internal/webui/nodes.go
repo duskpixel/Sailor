@@ -264,17 +264,17 @@ func patchNode(ctx context.Context, typed *kubernetes.Clientset, name string, pa
 func nodeCordon(ctx context.Context, typed *kubernetes.Clientset, name string) (string, error) {
 	err := patchNode(ctx, typed, name, []byte(`{"spec":{"unschedulable":true}}`))
 	if err != nil {
-		return "", fmt.Errorf("Cordon 失败：%v", err)
+		return "", fmt.Errorf("封锁失败：%v", err)
 	}
-	return fmt.Sprintf("节点 %s 已设为不可调度 (Cordon)", name), nil
+	return fmt.Sprintf("节点 %s 已封锁（停止调度）", name), nil
 }
 
 func nodeUncordon(ctx context.Context, typed *kubernetes.Clientset, name string) (string, error) {
 	err := patchNode(ctx, typed, name, []byte(`{"spec":{"unschedulable":null},"metadata":{"annotations":{"armada.io/drained-at":null}}}`))
 	if err != nil {
-		return "", fmt.Errorf("Uncordon 失败：%v", err)
+		return "", fmt.Errorf("恢复调度失败：%v", err)
 	}
-	return fmt.Sprintf("节点 %s 已恢复调度 (Uncordon)", name), nil
+	return fmt.Sprintf("节点 %s 已恢复调度", name), nil
 }
 
 func nodeDrain(ctx context.Context, typed *kubernetes.Clientset, name string) (string, error) {
@@ -285,14 +285,14 @@ func nodeDrain(ctx context.Context, typed *kubernetes.Clientset, name string) (s
 	}
 	b, _ := json.Marshal(drainPatch)
 	if err := patchNode(ctx, typed, name, b); err != nil {
-		return "", fmt.Errorf("Drain 失败：%v", err)
+		return "", fmt.Errorf("排空失败：%v", err)
 	}
 	// Step 2: 驱逐非 DaemonSet / 非 mirror Pod
 	podList, err := typed.CoreV1().Pods("").List(ctx, metav1.ListOptions{
 		FieldSelector: "spec.nodeName=" + name,
 	})
 	if err != nil {
-		return "", fmt.Errorf("Drain 失败：%v", err)
+		return "", fmt.Errorf("排空失败：%v", err)
 	}
 	evicted, skipped := 0, 0
 	for i := range podList.Items {
@@ -320,7 +320,7 @@ func nodeDrain(ctx context.Context, typed *kubernetes.Clientset, name string) (s
 		}
 		evicted++
 	}
-	return fmt.Sprintf("节点 %s 已 Drain，驱逐 %d 个 Pod，跳过 %d 个", name, evicted, skipped), nil
+	return fmt.Sprintf("节点 %s 已排空，驱逐 %d 个 Pod，跳过 %d 个", name, evicted, skipped), nil
 }
 
 func nodeDelete(ctx context.Context, typed *kubernetes.Clientset, name string) (string, error) {
