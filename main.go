@@ -35,7 +35,7 @@ func main() {
 	pool := k8sx.NewPool()
 	syn := syncer.New(st, pool)
 	execMgr := execsess.NewManager(pool, st)
-	kshMgr := ksh.NewManager()
+	kshMgr := ksh.NewManager(webui.ClusterNameLister(st))
 	agg := metrics.NewAggregator(pool)
 	wsPort, err := execMgr.Start()
 	if err != nil {

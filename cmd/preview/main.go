@@ -56,7 +56,7 @@ func main() {
 	webui.RegisterPages(tpl)
 
 	pool := k8sx.NewPool()
-	kshMgr := ksh.NewManager()
+	kshMgr := ksh.NewManager(webui.ClusterNameLister(st))
 	if _, err := kshMgr.Start(); err != nil {
 		log.Fatal(err)
 	}
