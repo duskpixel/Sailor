@@ -20,7 +20,7 @@
      x-transition:leave="duration-150 ease-in"
      x-transition:leave-start="opacity-100 translate-y-0"
      x-transition:leave-end="opacity-0 translate-y-4"
-     class="fixed bottom-4 right-0 z-50 flex flex-col bg-base-100 border-t border-x border-base-300 rounded-t-2xl shadow-2xl overflow-hidden"
+     class="fixed bottom-0 right-0 z-50 flex flex-col bg-base-100 border-t border-x border-base-300 rounded-t-2xl shadow-2xl overflow-hidden"
      :class="[sidebarOpen ? 'left-60' : 'left-16', dragging ? '' : 'transition-all duration-200']"
      :style="'height:' + (expanded ? height : 56) + 'px'">
   <!-- 高度手柄：常驻可见的握柄（贴边细条也能一眼认出可拖），双击折叠/展开 -->
@@ -69,7 +69,7 @@
       <span class="text-xs text-error break-all" x-text="error"></span>
       <button class="btn btn-outline btn-error btn-xs" @click="retry()">重试</button>
     </div>
-    <div x-ref="term" class="absolute inset-0 px-3 pt-2 pb-6" @click="_term && _term.focus()"></div>
+    <div x-ref="term" class="absolute inset-0 px-3 pt-2 pb-10" @click="_term && _term.focus()"></div>
   </div>
 </div>
 
@@ -127,9 +127,8 @@ function kshTerminal() {
       });
       this._themeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
       this.restore();
-      // 抽屉抬离底部 16px（bottom-4）：收起细条常驻时给页面内容让出
-      // 手柄 12 + 标题栏 44 + 底部边距 16，避免盖住列表最后一行
-      this.$watch('visible', v => document.body.style.paddingBottom = v ? '72px' : '');
+      // 收起细条常驻时给页面内容让出手柄 12 + 标题栏 44，避免盖住列表最后一行
+      this.$watch('visible', v => document.body.style.paddingBottom = v ? '56px' : '');
     },
 
     _clampHeight() {
