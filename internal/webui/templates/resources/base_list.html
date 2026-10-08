@@ -230,6 +230,12 @@
 <script>
 function resourceList() {
   const initialParams = new URLSearchParams(location.search);
+  // 命名空间筛选按集群持久化到 localStorage：切资源页 / 回来保持不变
+  // （URL ?namespace= 优先，方便分享定位）。命名空间列表页除外——它的行
+  // 本身就是 namespace，套用筛选会把列表过滤成空。
+  const NS_STORE_KEY = 'sailor.ns.{{.Content.Cluster.ID}}';
+  const IS_NS_LIST = '{{.Content.APIURL}}'.indexOf('/api/namespaces') !== -1;
+  const storedNS = IS_NS_LIST ? '' : (localStorage.getItem(NS_STORE_KEY) || '');
 
   return {
     loading: true,         // 首次加载 - 显示骨架屏
@@ -242,7 +248,7 @@ function resourceList() {
     optionalInstalled: null, // 可选 CRD（KEDA）安装状态：null=未知 true/false=已/未安装
     rows: [],
     namespaces: [],
-    nsFilter: initialParams.get('namespace') || '',
+    nsFilter: initialParams.get('namespace') || storedNS,
     nsOpen: false,           // ns combobox 下拉 panel 是否展开
     nsSearch: '',            // ns combobox 输入框内容（contains 匹配，比原生 select 强）
     search: initialParams.get('search') || '',
@@ -259,8 +265,13 @@ function resourceList() {
     init() {
       this.$watch('search', () => { this.page = 1; this._syncUrl(); });
       this.$watch('page', () => this._syncUrl());
-      this.$watch('nsFilter', () => this._syncUrl());
+      this.$watch('nsFilter', () => { this._syncUrl(); this._saveNs(); });
       this.load();
+    },
+
+    _saveNs() {
+      if (!this.nsFilter) localStorage.removeItem(NS_STORE_KEY);
+      else localStorage.setItem(NS_STORE_KEY, this.nsFilter);
     },
 
     _syncUrl() {
@@ -455,7 +466,7 @@ function resourceList() {
       this._loadController = new AbortController();
       let apiUrl = '{{.Content.APIURL}}';
       const params = new URLSearchParams();
-      if (this.nsFilter) params.set('namespace', this.nsFilter);
+      if (this.nsFilter && !IS_NS_LIST) params.set('namespace', this.nsFilter);
       if (refresh) params.set('refresh', '1');
       const qs = params.toString();
       if (qs) apiUrl += '?' + qs;
