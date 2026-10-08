@@ -144,7 +144,8 @@ namespace → pod → deployment → service → configmap → secret
 - kubeconfig 从加密存储物化成会话临时文件（`--kubeconfig` 指定，权限 0600，
   会话结束即删），**完全不碰 `~/.kube/config` 与 `KUBECONFIG` 环境变量**；
 - Go 侧自带行编辑器（回显 / 退格 / ↑↓ 历史 / Ctrl+C / Ctrl+L），kubectl
-  输出经 WS 直推 xterm.js；
+  输出经 WS 直推 xterm.js；终端配色跟随应用亮 / 暗主题（两套 16 色 ANSI
+  调色板，开着抽屉切主题实时切换）；
 - 前台命令运行期间，`exec -i` / `apply -f -`（粘贴 YAML 后 Ctrl+D 发 EOF）
   的键盘输入直通命令 stdin；
 - `edit` / `diff` / `port-forward` / `proxy` / `plugin` 依赖外部进程，

@@ -47,13 +47,13 @@
     </div>
   </div>
 
-  <!-- 终端区：收起时仅隐藏，绝不销毁 -->
-  <div class="flex-1 min-h-0 relative bg-[#0b0f14]" x-show="expanded" x-cloak>
-    <div x-show="starting" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#0b0f14]">
+  <!-- 终端区：收起时仅隐藏，绝不销毁；背景色跟随主题（与 xterm 画布同源） -->
+  <div class="flex-1 min-h-0 relative" x-show="expanded" x-cloak :style="'background-color:' + termBg()">
+    <div x-show="starting" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3" :style="'background-color:' + termBg()">
       <span class="loading loading-spinner loading-md text-primary"></span>
-      <span class="text-xs opacity-50 text-neutral-content" x-text="reconnecting ? '正在恢复会话…' : '正在启动 kubectl 会话...'"></span>
+      <span class="text-xs opacity-60 text-base-content" x-text="reconnecting ? '正在恢复会话…' : '正在启动 kubectl 会话...'"></span>
     </div>
-    <div x-show="error" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 px-8 text-center bg-[#0b0f14]">
+    <div x-show="error" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 px-8 text-center" :style="'background-color:' + termBg()">
       <i class="fas fa-triangle-exclamation text-2xl text-error"></i>
       <span class="text-xs text-error break-all" x-text="error"></span>
       <button class="btn btn-outline btn-error btn-xs" @click="retry()">重试</button>
@@ -71,14 +71,50 @@ function kshTerminal() {
   return {
     clusterId: 0, cluster: '', session: '',
     connected: false, starting: false, reconnecting: false, error: null,
-    expanded: true, visible: false, height: 300, dragging: false,
-    _term: null, _fit: null, _ws: null, _onResize: null, _closing: false, _retryTimer: null,
+    expanded: true, visible: false, height: 300, dragging: false, themeNow: 'dark',
+    _term: null, _fit: null, _ws: null, _onResize: null, _closing: false, _retryTimer: null, _themeObserver: null,
+
+    // 两套终端配色（背景/前景/光标 + 16 色 ANSI 调色板）：暗色沿用 Ayu 系
+    // （现有观感），亮色对齐应用亮色主题的白底深字 + 青色光标。Go 侧提示符
+    // 用的 ANSI 亮青/亮黄在两套调色板里都保证可读。
+    _termTheme() {
+      if (this.themeNow === 'light') {
+        return {
+          background: '#ffffff', foreground: '#232936', cursor: '#0e7490',
+          selectionBackground: '#bfdbfe',
+          black: '#232936', red: '#d63947', green: '#18794e', yellow: '#b45309',
+          blue: '#2f5fe0', magenta: '#a832a8', cyan: '#0e7490', white: '#5b6572',
+          brightBlack: '#697686', brightRed: '#e0565f', brightGreen: '#1f9d5b',
+          brightYellow: '#ca6a04', brightBlue: '#4b7bff', brightMagenta: '#c04ac0',
+          brightCyan: '#0e8faf', brightWhite: '#1a2230',
+        };
+      }
+      return {
+        background: '#0b0f14', foreground: '#d6deeb', cursor: '#7fdbca',
+        selectionBackground: '#243442',
+        black: '#0b0f14', red: '#ef5350', green: '#22c55e', yellow: '#ecc48d',
+        blue: '#82aaff', magenta: '#c792ea', cyan: '#7fdbca', white: '#d6deeb',
+        brightBlack: '#5f7a8a', brightRed: '#ff8a80', brightGreen: '#4ade80',
+        brightYellow: '#f7d384', brightBlue: '#93c5fd', brightMagenta: '#e1bee7',
+        brightCyan: '#89ddff', brightWhite: '#ffffff',
+      };
+    },
+
+    // 容器/遮罩背景与 xterm 画布保持同源，切主题时不露底色
+    termBg() { return this._termTheme().background; },
 
     // Alpine 组件初始化：恢复上一页留下的会话
     init() {
       const saved = parseInt(sessionStorage.getItem('sailor.ksh.height') || '', 10);
       this.height = saved >= 160 ? saved : Math.round(window.innerHeight * 0.42);
       this._clampHeight();
+      // 抽屉开着时切主题实时跟随（与 Monaco 的做法一致，观察 data-theme）
+      this.themeNow = document.documentElement.getAttribute('data-theme') || 'dark';
+      this._themeObserver = new MutationObserver(() => {
+        this.themeNow = document.documentElement.getAttribute('data-theme') || 'dark';
+        if (this._term) this._term.options.theme = this._termTheme();
+      });
+      this._themeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
       this.restore();
       // 抽屉抬离底部 16px（bottom-4）：收起细条常驻时给页面内容让出
       // 细条 50px + 底部边距 16px，避免盖住列表最后一行
@@ -272,7 +308,7 @@ function kshTerminal() {
         scrollback: 5000,
         // kubectl 输出只有 \n；不转换的话表格会阶梯错位
         convertEol: true,
-        theme: {background: '#0b0f14', foreground: '#d6deeb', cursor: '#7fdbca'},
+        theme: this._termTheme(),
       });
       this._term = term;
       term.open(this.$refs.term);
