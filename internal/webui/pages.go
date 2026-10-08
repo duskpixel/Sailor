@@ -1,25 +1,25 @@
 package webui
 
-// RegisterPages 页面模板组合登记。base.html 总在最前；ksh_modal（kubectl
-// 终端弹窗）挂在全局侧栏入口上，所有页面都要带上；资源页额外带 base_list 与
+// RegisterPages 页面模板组合登记。base.html 总在最前；ksh_drawer（kubectl
+// 终端抽屉）挂在全局侧栏入口上，所有页面都要带上；资源页额外带 base_list 与
 // resource_modals 片段（片段内用 {{define}} 包裹）。
 func RegisterPages(r *Renderer) {
-	// 公共片段：toast + kubectl 终端弹窗；resource_modals 仅资源列表页需要
+	// 公共片段：toast + kubectl 终端抽屉；resource_modals 仅资源列表页需要
 	toast := "components/toast.html"
-	kshModal := "components/ksh_modal.html"
+	kshDrawer := "components/ksh_drawer.html"
 	resourceModals := "components/resource_modals.html"
 
-	r.Register("dashboard", "base.html", toast, kshModal, "dashboard/index.html")
+	r.Register("dashboard", "base.html", toast, kshDrawer, "dashboard/index.html")
 
-	r.Register("cluster_list", "base.html", toast, kshModal, "clusters/list.html")
-	r.Register("cluster_add", "base.html", toast, kshModal, "clusters/add.html")
-	r.Register("cluster_edit", "base.html", toast, kshModal, "clusters/edit.html")
-	r.Register("cluster_detail", "base.html", toast, kshModal, "clusters/detail.html")
-	r.Register("nodes", "base.html", toast, kshModal, "clusters/nodes.html")
-	r.Register("node_detail", "base.html", toast, kshModal, "clusters/node_detail.html")
+	r.Register("cluster_list", "base.html", toast, kshDrawer, "clusters/list.html")
+	r.Register("cluster_add", "base.html", toast, kshDrawer, "clusters/add.html")
+	r.Register("cluster_edit", "base.html", toast, kshDrawer, "clusters/edit.html")
+	r.Register("cluster_detail", "base.html", toast, kshDrawer, "clusters/detail.html")
+	r.Register("nodes", "base.html", toast, kshDrawer, "clusters/nodes.html")
+	r.Register("node_detail", "base.html", toast, kshDrawer, "clusters/node_detail.html")
 
 	list := func(page string) []string {
-		return []string{"base.html", toast, kshModal, resourceModals, "resources/base_list.html", page}
+		return []string{"base.html", toast, kshDrawer, resourceModals, "resources/base_list.html", page}
 	}
 	r.Register("resource_namespace", list("resources/namespace_list.html")...)
 	r.Register("resource_deployment", list("resources/deployment_list.html")...)

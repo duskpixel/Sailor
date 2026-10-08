@@ -794,3 +794,42 @@ func (s *Server) kshOpen(w http.ResponseWriter, r *http.Request) {
 		"ws_url":  info.WSTemplate,
 	})
 }
+
+// kshAttach 页面跳转 / 切换集群后恢复既有会话（会话在 Go 侧保持存活）。
+func (s *Server) kshAttach(w http.ResponseWriter, r *http.Request) {
+	c, _, ok := s.clusterCtx(w, r, r.PathValue("id"))
+	if !ok {
+		return
+	}
+	var body struct {
+		Session string `json:"session"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Session == "" {
+		JSONError(w, 400, "session is required")
+		return
+	}
+	info, status, err := s.Ksh.Attach(c.ID, body.Session)
+	if err != nil {
+		JSONError(w, status, err.Error())
+		return
+	}
+	JSON(w, 200, map[string]interface{}{
+		"success": true,
+		"session": info.Session,
+		"cluster": info.Cluster,
+		"ws_url":  info.WSTemplate,
+	})
+}
+
+// kshClose 显式关闭会话（抽屉关闭按钮；WS 断开不会关会话）。
+func (s *Server) kshClose(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Session string `json:"session"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Session == "" {
+		JSONError(w, 400, "session is required")
+		return
+	}
+	s.Ksh.Close(body.Session)
+	JSON(w, 200, map[string]interface{}{"success": true})
+}

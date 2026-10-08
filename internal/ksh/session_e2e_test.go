@@ -124,3 +124,86 @@ func TestOpenRejectsBadKubeconfig(t *testing.T) {
 		t.Errorf("status = %d, want 400", status)
 	}
 }
+
+func dialKsh(t *testing.T, port int, token string) *websocket.Conn {
+	t.Helper()
+	wsURL := "ws://127.0.0.1:" + strconv.Itoa(port) + "/ws/ksh?token=" + url.QueryEscape(token)
+	conn, resp, err := websocket.DefaultDialer.Dial(wsURL, http.Header{})
+	if err != nil {
+		t.Fatalf("拨号: %v (resp %v)", err, resp)
+	}
+	return conn
+}
+
+// TestSessionResume 验证会话与连接解耦：断连后会话存活，重连回放滚动缓冲，
+// 显式 Close 后会话才真正结束。
+func TestSessionResume(t *testing.T) {
+	m := NewManager()
+	port, err := m.Start()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer m.Stop()
+
+	info, _, err := m.Open(7, "resume", func() (string, error) { return fakeKubeconfig, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 第一段连接：跑一条命令
+	conn := dialKsh(t, port, info.Session)
+	readUntil(t, conn, "kubectl@resume")
+	_ = conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	if err := conn.WriteMessage(websocket.BinaryMessage, []byte("version --client\r")); err != nil {
+		t.Fatal(err)
+	}
+	readUntil(t, conn, "Client Version")
+	readUntil(t, conn, "kubectl@resume")
+	conn.Close() // 模拟页面跳转：连接断开
+
+	// 会话应仍可 attach（同一 token 重连）
+	info2, status, err := m.Attach(7, info.Session)
+	if err != nil || status != 0 {
+		t.Fatalf("attach 失败: %v (status %d)", err, status)
+	}
+	if info2.Session != info.Session {
+		t.Fatalf("attach 返回了不同会话 %q", info2.Session)
+	}
+
+	conn2 := dialKsh(t, port, info.Session)
+	defer conn2.Close()
+	// 回放应包含断连前的命令输出 + 恢复提示
+	replay := readUntil(t, conn2, "连接已恢复")
+	if !strings.Contains(replay, "Client Version") {
+		t.Error("回放内容缺少断连前的命令输出")
+	}
+	if !strings.Contains(replay, "Sailor 内置 kubectl") {
+		t.Error("回放内容缺少横幅")
+	}
+
+	// 显式关闭后：attach 404，拨号被拒
+	if !m.Close(info.Session) {
+		t.Error("Close 应返回 true")
+	}
+	if _, status, _ := m.Attach(7, info.Session); status != 404 {
+		t.Errorf("关闭后 attach status = %d, want 404", status)
+	}
+	wsURL := "ws://127.0.0.1:" + strconv.Itoa(port) + "/ws/ksh?token=" + url.QueryEscape(info.Session)
+	if _, resp, err := websocket.DefaultDialer.Dial(wsURL, http.Header{}); err == nil {
+		t.Error("关闭后拨号应失败")
+	} else if resp == nil || resp.StatusCode != 404 {
+		t.Errorf("关闭后拨号应得 404, got %v", resp)
+	}
+}
+
+// TestAttachRejectsWrongCluster attach 校验会话归属集群。
+func TestAttachRejectsWrongCluster(t *testing.T) {
+	m := NewManager()
+	info, _, err := m.Open(1, "a", func() (string, error) { return fakeKubeconfig, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, status, _ := m.Attach(999, info.Session); status != 404 {
+		t.Errorf("他集群 attach status = %d, want 404", status)
+	}
+}

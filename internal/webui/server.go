@@ -105,6 +105,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /resources/{id}/pods/{ns}/{pod}/exec/open/{$}", s.podExecOpen)
 	mux.HandleFunc("POST /resources/{id}/pods/{ns}/{pod}/exec/close/{$}", s.podExecClose)
 	mux.HandleFunc("POST /resources/{id}/ksh/open/{$}", s.kshOpen)
+	mux.HandleFunc("POST /resources/{id}/ksh/attach/{$}", s.kshAttach)
+	mux.HandleFunc("POST /resources/{id}/ksh/close/{$}", s.kshClose)
 	mux.HandleFunc("GET /resources/{id}/yaml/{kind}/{name}/", s.resourceYAML)      // cluster-scoped
 	mux.HandleFunc("GET /resources/{id}/yaml/{kind}/{ns}/{name}/", s.resourceYAML) // namespaced
 	mux.HandleFunc("POST /resources/{id}/apply/{$}", s.resourceApplyAPI)

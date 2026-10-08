@@ -1,0 +1,330 @@
+{{/* 内置 kubectl 终端：全局底部抽屉（非模态）。
+
+要求（与容器终端的模态弹窗刻意不同）：
+1. 自下向上展开，可贴边收起成细条、再点开 —— 收起只是 v-show 隐藏，
+   xterm 与 WS 一概不动；
+2. 页面是服务端渲染，切页面 / 切集群是整页跳转，WS 必断 —— 会话 ID 存
+   sessionStorage，新页面 load 时 POST attach 恢复，Go 侧滚动缓冲整段回放，
+   语义是「恢复现场」；抽屉收起状态也一并持久化；
+3. 抽屉的 X 才是真正关会话（调 close 端点），exit 命令收到 exit 帧同样收摊。
+
+侧栏入口（base.html）dispatch open-ksh 事件：同集群只展开；换集群则关旧
+会话、开新会话（kubectl 会话绑定单集群 kubeconfig）。 */}}
+{{define "ksh_drawer"}}
+<style>[x-cloak]{display:none!important}</style>
+<div x-data="kshTerminal()" x-cloak x-show="visible"
+     class="fixed bottom-0 right-0 z-50 flex flex-col bg-base-100 border-t border-base-300 shadow-2xl overflow-hidden transition-all duration-200"
+     :class="[sidebarOpen ? 'left-60' : 'left-16', expanded ? 'h-[42vh]' : 'h-11']">
+  <!-- 标题栏：抽屉收起时它是贴边的细条，点击整条切换展开/收起 -->
+  <div class="h-11 flex items-center justify-between px-4 border-b border-base-300 bg-base-200/70 cursor-pointer select-none flex-shrink-0 group"
+       @click="toggle()">
+    <div class="flex items-center gap-3 min-w-0">
+      <i class="fas fa-terminal text-sm text-primary"></i>
+      <span class="font-semibold text-sm text-base-content">kubectl 终端</span>
+      <span x-show="cluster" class="px-2 py-0.5 rounded-md text-xs bg-primary/15 text-primary truncate max-w-[220px]"
+            x-text="cluster"></span>
+      <span class="flex items-center gap-1.5 text-[11px]"
+            :class="connected ? 'text-success' : 'text-base-content/50'">
+        <span class="w-1.5 h-1.5 rounded-full"
+              :class="connected ? 'bg-success animate-pulse' : 'bg-base-content/40'"></span>
+        <span x-text="statusText()"></span>
+      </span>
+    </div>
+    <div class="flex items-center gap-1">
+      <button class="btn btn-ghost btn-sm btn-circle h-8 w-8 min-h-0 opacity-60 group-hover:opacity-100"
+              :title="expanded ? '收起（会话保持）' : '展开'" @click.stop="toggle()">
+        <i class="fas text-xs" :class="expanded ? 'fa-chevron-down' : 'fa-chevron-up'"></i>
+      </button>
+      <button class="btn btn-ghost btn-sm btn-circle h-8 w-8 min-h-0 opacity-60 group-hover:opacity-100"
+              title="关闭会话" @click.stop="close()">
+        <i class="fas fa-times text-xs"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- 终端区：收起时仅隐藏，绝不销毁 -->
+  <div class="flex-1 min-h-0 relative bg-[#0b0f14]" x-show="expanded" x-cloak>
+    <div x-show="starting" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-[#0b0f14]">
+      <span class="loading loading-spinner loading-md text-primary"></span>
+      <span class="text-xs opacity-50 text-neutral-content" x-text="reconnecting ? '正在恢复会话…' : '正在启动 kubectl 会话...'"></span>
+    </div>
+    <div x-show="error" class="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 px-8 text-center bg-[#0b0f14]">
+      <i class="fas fa-triangle-exclamation text-2xl text-error"></i>
+      <span class="text-xs text-error break-all" x-text="error"></span>
+      <button class="btn btn-outline btn-error btn-xs" @click="retry()">重试</button>
+    </div>
+    <div x-ref="term" class="absolute inset-0 px-3 py-2" @click="_term && _term.focus()"></div>
+  </div>
+</div>
+
+<script>
+// kubectl 终端抽屉。侧栏 open-ksh 事件打开；页面 load 时 restore() 恢复
+// sessionStorage 里登记的会话（attach → 回放）。WS 断开自动重试一次。
+function kshTerminal() {
+  const STORE_KEY = 'sailor.ksh.session';
+
+  return {
+    clusterId: 0, cluster: '', session: '',
+    connected: false, starting: false, reconnecting: false, error: null,
+    expanded: true, visible: false,
+    _term: null, _fit: null, _ws: null, _onResize: null, _closing: false, _retryTimer: null,
+
+    // Alpine 组件初始化：恢复上一页留下的会话
+    init() {
+      this.restore();
+      // 收起细条常驻底部时，给页面内容让出 44px，避免盖住列表最后一行
+      this.$watch('visible', v => document.body.style.paddingBottom = v ? '44px' : '');
+    },
+
+    statusText() {
+      if (this.starting) return this.reconnecting ? '恢复中' : '连接中';
+      if (this.connected) return '已连接';
+      return this.session ? '已断开' : '未连接';
+    },
+
+    // ─── 入口：侧栏点击 / 页面加载恢复 ───────────────────────
+    open(detail) {
+      if (this.session && this.clusterId === detail.clusterId) {
+        this.expand();
+        // 断了但没在重试：补一次
+        if (!this.connected && !this.starting && !this.error) this._attach();
+        return;
+      }
+      // 换集群：kubectl 会话绑定单集群，旧会话显式关掉再开新的
+      if (this.session) this._closeQuiet();
+      this._openFor(detail.clusterId);
+    },
+
+    restore() {
+      let saved = null;
+      try { saved = JSON.parse(sessionStorage.getItem(STORE_KEY) || 'null'); } catch (e) {}
+      if (!saved || !saved.session) return;
+      this.clusterId = saved.clusterId;
+      this.cluster = saved.cluster || '';
+      this.session = saved.session;
+      this.expanded = saved.expanded !== false;
+      this.visible = true;
+      this.starting = true;
+      this.reconnecting = true;
+      this.$nextTick(() => { this._ensureTerm(); this._attach(); });
+    },
+
+    // ─── 会话建立 / 恢复 / 关闭 ───────────────────────────────
+    _openFor(clusterId) {
+      this.clusterId = clusterId;
+      this.cluster = '';
+      this.session = '';
+      this.error = null;
+      this.connected = false;
+      this.starting = true;
+      this.reconnecting = false;
+      this.visible = true;
+      this.expanded = true;
+      this.$nextTick(() => this._ensureTerm());
+      fetch(`/resources/${clusterId}/ksh/open/`, {
+        method: 'POST',
+        headers: {'X-Requested-With': 'XMLHttpRequest'},
+      }).then(r => r.json().then(d => ({ok: r.ok, data: d})))
+        .then(({ok, data}) => {
+          if (!ok || !data.success) {
+            this.starting = false;
+            this.error = data.error || '无法建立 kubectl 会话';
+            return;
+          }
+          this.cluster = data.cluster || '';
+          this.session = data.session;
+          this._persist();
+          this._connect(data.ws_url + encodeURIComponent(this.session));
+        }).catch(e => { this.starting = false; this.error = e.message; });
+    },
+
+    _attach() {
+      if (!this.session) return;
+      this.starting = true;
+      this.reconnecting = true;
+      this.error = null;
+      fetch(`/resources/${this.clusterId}/ksh/attach/`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+        body: JSON.stringify({session: this.session}),
+      }).then(r => r.json().then(d => ({ok: r.ok, data: d})))
+        .then(({ok, data}) => {
+          if (!ok || !data.success) {
+            // 会话已过期（空闲回收 / 应用重启）：清掉旧状态，可手动重开
+            this.starting = false;
+            this.reconnecting = false;
+            this.session = '';
+            sessionStorage.removeItem(STORE_KEY);
+            this.error = data.error || '会话已过期，请重新打开';
+            return;
+          }
+          this._connect(data.ws_url + encodeURIComponent(this.session));
+        }).catch(e => {
+          this.starting = false;
+          this.reconnecting = false;
+          this.error = e.message;
+        });
+    },
+
+    // close 端点：真正结束会话（WS 断开不会）
+    _closeQuiet() {
+      const session = this.session;
+      const clusterId = this.clusterId;
+      this.session = '';
+      sessionStorage.removeItem(STORE_KEY);
+      if (session) {
+        fetch(`/resources/${clusterId}/ksh/close/`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({session}),
+        }).catch(() => {});
+      }
+    },
+
+    // ─── 抽屉开关 ─────────────────────────────────────────────
+    toggle() {
+      this.expanded = !this.expanded;
+      this._persist();
+      this._refit();
+    },
+
+    expand() {
+      if (!this.expanded) this.toggle();
+      else if (this._term) this._term.focus();
+    },
+
+    // X 按钮：关会话 + 收摊
+    close() {
+      if (this._retryTimer) { clearTimeout(this._retryTimer); this._retryTimer = null; }
+      this._closing = true;
+      this._closeQuiet();
+      this._teardownTerm();
+      this.connected = false;
+      this.starting = false;
+      this.visible = false;
+      this._closing = false;
+    },
+
+    retry() {
+      this.error = null;
+      if (this.session) this._attach();
+      else if (this.clusterId) this._openFor(this.clusterId);
+    },
+
+    // ─── 终端与连接 ───────────────────────────────────────────
+    _persist() {
+      if (!this.session) { sessionStorage.removeItem(STORE_KEY); return; }
+      sessionStorage.setItem(STORE_KEY, JSON.stringify({
+        clusterId: this.clusterId, cluster: this.cluster,
+        session: this.session, expanded: this.expanded,
+      }));
+    },
+
+    _ensureTerm() {
+      if (this._term || !window.Terminal) {
+        if (!window.Terminal) {
+          this.starting = false;
+          this.error = '终端组件未加载（static/js/xterm.js）';
+        }
+        return;
+      }
+      const term = new window.Terminal({
+        cursorBlink: true,
+        fontSize: 12.5,
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        scrollback: 5000,
+        // kubectl 输出只有 \n；不转换的话表格会阶梯错位
+        convertEol: true,
+        theme: {background: '#0b0f14', foreground: '#d6deeb', cursor: '#7fdbca'},
+      });
+      this._term = term;
+      term.open(this.$refs.term);
+      if (window.FitAddon) {
+        this._fit = new window.FitAddon.FitAddon();
+        term.loadAddon(this._fit);
+        this._fit.fit();
+      }
+      // 回显由 Go 侧行编辑器负责，前端只透传键击
+      term.onData(d => {
+        if (this._ws && this._ws.readyState === WebSocket.OPEN) this._ws.send(new TextEncoder().encode(d));
+      });
+      this._onResize = () => this._refit();
+      window.addEventListener('resize', this._onResize);
+    },
+
+    // 展开动画结束后 xterm 需要重新计算行列
+    _refit() {
+      this.$nextTick(() => {
+        if (this._fit && this._term && this.expanded) this._fit.fit();
+        setTimeout(() => { if (this._fit && this._term && this.expanded) this._fit.fit(); }, 250);
+      });
+    },
+
+    _connect(wsUrl) {
+      // 重连一律换新 xterm：服务端会整段回放滚动缓冲，旧实例上会重复
+      this._teardownTerm();
+      this._ensureTerm();
+      const ws = new WebSocket(wsUrl);
+      ws.binaryType = 'arraybuffer';
+      this._ws = ws;
+      ws.onopen = () => {
+        this.starting = false;
+        this.reconnecting = false;
+        this.connected = true;
+        if (this._term && this.expanded) this._term.focus();
+      };
+      ws.onmessage = (ev) => {
+        if (ev.data instanceof ArrayBuffer || ev.data instanceof Uint8Array) {
+          if (this._term) this._term.write(ev.data instanceof ArrayBuffer ? new Uint8Array(ev.data) : ev.data);
+          return;
+        }
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type === 'exit') this._onEnded();
+        } catch (e) { /* 忽略无法解析的控制帧 */ }
+      };
+      ws.onerror = () => {
+        if (!this.connected) {
+          this.starting = false;
+          this.reconnecting = false;
+          this.error = '无法连接终端网关';
+        }
+      };
+      ws.onclose = () => {
+        this._ws = null;
+        this.connected = false;
+        if (this._closing || !this.session) return;
+        // 意外断开：1.5s 后自动 attach 一次（一次就好，失败停在错误态）
+        if (this._retryTimer) return;
+        this._retryTimer = setTimeout(() => {
+          this._retryTimer = null;
+          if (this.session && !this.connected && !this._closing) this._attach();
+        }, 1500);
+      };
+    },
+
+    _onEnded() {
+      // exit 命令 / 服务端主动结束：清状态收摊
+      if (this._retryTimer) { clearTimeout(this._retryTimer); this._retryTimer = null; }
+      this.connected = false;
+      this.session = '';
+      sessionStorage.removeItem(STORE_KEY);
+      if (typeof showToast === 'function') showToast('kubectl 会话已结束', 'success');
+      this._teardownTerm();
+      this.starting = false;
+      this.visible = false;
+    },
+
+    _teardownTerm() {
+      if (this._ws) { try { this._ws.close(); } catch (e) {} this._ws = null; }
+      if (this._onResize) {
+        window.removeEventListener('resize', this._onResize);
+        this._onResize = null;
+      }
+      if (this._term) { this._term.dispose(); this._term = null; }
+      this._fit = null;
+    },
+  };
+}
+</script>
+{{end}}

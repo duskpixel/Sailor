@@ -129,12 +129,17 @@ namespace → pod → deployment → service → configmap → secret
 
 会话仍有空闲超时（5 分钟）与总数上限（32 个）兜底。
 
-### 内置 kubectl 终端：进程内命令树
+### 内置 kubectl 终端：进程内命令树 + 底部抽屉
 
 侧栏的「kubectl 终端」给活动集群开一个 REPL：不依赖系统里装没装 kubectl，
 而是把 `k8s.io/kubectl` 的命令树直接链进应用，语法与真 kubectl 完全一致
-（与 client-go 同为 v0.37，无版本错配）。
+（与 client-go 同为 v0.37，无版本错配）。UI 是自下向上的**底部抽屉**而非
+模态弹窗：可以贴边收起成细条再点开，收起只隐藏不销毁。
 
+- **会话与连接解耦**：切页面 / 切集群是整页跳转、WS 必断，但会话（行编辑
+  状态 / 历史 / 前台命令）在 Go 侧继续存活，断连期间的输出写入 256KB 滚动
+  缓冲，重连（attach）时整段回放 —— 恢复现场而非重开；收起/展开状态也随
+  sessionStorage 持久化，跨页面保持；
 - kubeconfig 从加密存储物化成会话临时文件（`--kubeconfig` 指定，权限 0600，
   会话结束即删），**完全不碰 `~/.kube/config` 与 `KUBECONFIG` 环境变量**；
 - Go 侧自带行编辑器（回显 / 退格 / ↑↓ 历史 / Ctrl+C / Ctrl+L），kubectl
@@ -145,8 +150,9 @@ namespace → pod → deployment → service → configmap → secret
   在分发前拦截并给出替代提示（`edit` 引导到 YAML 编辑弹窗）；
 - 每条命令的执行包 `recover` 兜底，kubectl 库内部异常不会带崩应用。
 
-会话空闲 15 分钟回收，上限 8 个。Ctrl+C 一律本地取消命令（不转发为远程
-SIGINT），退出交互式 `exec -it` 请输入 `exit`。
+会话空闲 15 分钟回收，上限 8 个；断连后仍在产出输出的会话（`logs -f`）不
+计入空闲。Ctrl+C 一律本地取消命令（不转发为远程 SIGINT），退出交互式
+`exec -it` 请输入 `exit`；抽屉的关闭按钮才会真正结束会话。
 
 ### kubeconfig 加密存储
 
