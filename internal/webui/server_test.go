@@ -217,3 +217,25 @@ func containsSubstr(s, sub string) bool {
 	}
 	return false
 }
+
+func TestSidebarActive(t *testing.T) {
+	cases := map[string]string{
+		"/":                           "dashboard",
+		"/clusters/":                  "clusters",
+		"/clusters/add/":              "clusters",
+		"/clusters/3/":                "clusters",
+		"/clusters/3/edit/":           "clusters",
+		"/clusters/3/nodes/manage/":   "nodes",
+		"/clusters/3/node/abc/":       "nodes",
+		"/resources/1/namespaces/":    "namespaces",
+		"/resources/1/deployments/":   "deployments",
+		"/resources/1/pods/":          "pods",
+		"/resources/1/scaledobjects/": "scaledobjects",
+		"/resources/1/pvcs/":          "pvcs",
+	}
+	for path, want := range cases {
+		if got := sidebarActive(path); got != want {
+			t.Errorf("sidebarActive(%q) = %q, want %q", path, got, want)
+		}
+	}
+}

@@ -13,8 +13,11 @@ import (
 
 // PageData 所有页面共享的渲染上下文。
 type PageData struct {
-	PageID        string // 用于侧边栏高亮（目前仅 dashboard）
-	Title         string
+	PageID string
+	Title  string
+	// SidebarActive 侧栏当前高亮段（dashboard/clusters/nodes/资源 kind 复数），
+	// 由路径推导 —— 整页跳转后侧栏重渲染，高亮跟随让"选中不丢"。
+	SidebarActive string
 	CurrentPath   string
 	Flash         *Flash
 	AllClusters   interface{} // []*store.Cluster

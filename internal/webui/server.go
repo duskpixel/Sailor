@@ -159,6 +159,7 @@ func (s *Server) pageData(r *http.Request, pageID, title string, content interfa
 	return &PageData{
 		PageID:        pageID,
 		Title:         title,
+		SidebarActive: sidebarActive(r.URL.Path),
 		CurrentPath:   r.URL.Path,
 		Flash:         flashFromQuery(r),
 		AllClusters:   s.Store.ListClusters(),
@@ -168,6 +169,28 @@ func (s *Server) pageData(r *http.Request, pageID, title string, content interfa
 		Content:       content,
 		KEDAInstalled: s.kedaInstalled(),
 	}
+}
+
+// sidebarActive 从请求路径推侧栏高亮段：资源页取 kind 复数；集群详情 /
+// 编辑归"集群列表"；节点管理与节点详情归"节点管理"。
+func sidebarActive(path string) string {
+	if path == "/" {
+		return "dashboard"
+	}
+	if rest, ok := strings.CutPrefix(path, "/clusters/"); ok {
+		// rest 形如 "{id}/nodes/manage/" 或 "{id}/node/{name}/"
+		if strings.Contains(rest, "/nodes/") || strings.Contains(rest, "/node/") {
+			return "nodes"
+		}
+		return "clusters"
+	}
+	if rest, ok := strings.CutPrefix(path, "/resources/"); ok {
+		parts := strings.Split(strings.Trim(rest, "/"), "/")
+		if len(parts) >= 2 {
+			return parts[1] // /resources/{id}/{kind}/…
+		}
+	}
+	return ""
 }
 
 // kedaInstalled 读取同步器写入的 KEDA 安装标记，决定侧栏 KEDA 入口是否显示。

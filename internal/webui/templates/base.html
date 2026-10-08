@@ -196,9 +196,9 @@
       </a>
     </div>
 
-    <nav class="flex-1 py-2 px-2 overflow-y-auto overflow-x-hidden">
+    <nav id="sidebarNav" class="flex-1 py-2 px-2 overflow-y-auto overflow-x-hidden">
       <!-- Dashboard -->
-      <a href="/" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .PageID "dashboard"}}active{{end}}">
+      <a href="/" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "dashboard"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-th-large text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">仪表盘</span>
       </a>
@@ -207,15 +207,15 @@
       <div class="mt-4 mb-1 px-3">
         <span class="sidebar-section-title text-[10px] font-semibold uppercase tracking-widest opacity-30">集群</span>
       </div>
-      <a href="/clusters/" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="/clusters/" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "clusters"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-server text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">集群列表</span>
       </a>
-      <a href="{{if .ActiveCluster}}/clusters/{{.ActiveCluster.ID}}/nodes/manage/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/clusters/{{.ActiveCluster.ID}}/nodes/manage/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "nodes"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-cube text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">节点管理</span>
       </a>
-      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/namespaces/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/namespaces/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "namespaces"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-layer-group text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">命名空间</span>
       </a>
@@ -230,27 +230,27 @@
       <div class="mt-4 mb-1 px-3">
         <span class="sidebar-section-title text-[10px] font-semibold uppercase tracking-widest opacity-30">工作负载</span>
       </div>
-      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/deployments/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/deployments/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "deployments"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-rocket text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">Deployments</span>
       </a>
-      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/statefulsets/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/statefulsets/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "statefulsets"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-database text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">StatefulSets</span>
       </a>
-      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/daemonsets/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/daemonsets/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "daemonsets"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-clone text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">DaemonSets</span>
       </a>
-      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/jobs/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/jobs/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "jobs"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-briefcase text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">Jobs</span>
       </a>
-      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/cronjobs/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/cronjobs/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "cronjobs"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-clock-rotate-left text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">CronJobs</span>
       </a>
-      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/pods/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/pods/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "pods"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-cubes text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">Pods</span>
       </a>
@@ -259,16 +259,16 @@
       <div class="mt-4 mb-1 px-3">
         <span class="sidebar-section-title text-[10px] font-semibold uppercase tracking-widest opacity-30">弹性伸缩</span>
       </div>
-      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/hpas/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/hpas/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "hpas"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-chart-line text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">HPA</span>
       </a>
       {{if .KEDAInstalled}}
-      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/scaledobjects/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/scaledobjects/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "scaledobjects"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-arrows-left-right-to-line text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">KEDA ScaledObjects</span>
       </a>
-      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/scaledjobs/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/scaledjobs/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "scaledjobs"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-arrows-up-to-line text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">KEDA ScaledJobs</span>
       </a>
@@ -278,15 +278,15 @@
       <div class="mt-4 mb-1 px-3">
         <span class="sidebar-section-title text-[10px] font-semibold uppercase tracking-widest opacity-30">网络与存储</span>
       </div>
-      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/services/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/services/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "services"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-network-wired text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">Services</span>
       </a>
-      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/ingresses/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/ingresses/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "ingresses"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-globe text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">Ingress</span>
       </a>
-      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/pvcs/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/pvcs/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "pvcs"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-hdd text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">PV / PVC</span>
       </a>
@@ -295,11 +295,11 @@
       <div class="mt-4 mb-1 px-3">
         <span class="sidebar-section-title text-[10px] font-semibold uppercase tracking-widest opacity-30">配置</span>
       </div>
-      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/configmaps/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/configmaps/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "configmaps"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-file-code text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">ConfigMaps</span>
       </a>
-      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/secrets/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors">
+      <a href="{{if .ActiveCluster}}/resources/{{.ActiveCluster.ID}}/secrets/{{else}}/clusters/{{end}}" class="sidebar-nav-item flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors {{if eq .SidebarActive "secrets"}}active{{end}}">
         <i class="sidebar-nav-icon fas fa-key text-xs w-4 text-center opacity-60"></i>
         <span class="sidebar-label">Secrets</span>
       </a>
@@ -394,6 +394,22 @@
         const toggle = document.getElementById('themeToggle');
         if (toggle) toggle.checked = (saved === 'light');
       }
+    })();
+    // 侧栏滚动位置跨页面保持：整页跳转后恢复到离开时的位置，
+    // 视觉上等同"侧栏没有刷新"（高亮跟随由服务端 SidebarActive 渲染）
+    (function() {
+      const nav = document.getElementById('sidebarNav');
+      if (!nav) return;
+      const saved = parseInt(sessionStorage.getItem('sailor.sidebarScroll') || '0', 10);
+      if (saved > 0) nav.scrollTop = saved;
+      let timer = null;
+      nav.addEventListener('scroll', function() {
+        if (timer) return;
+        timer = setTimeout(function() {
+          timer = null;
+          sessionStorage.setItem('sailor.sidebarScroll', String(nav.scrollTop));
+        }, 120);
+      }, {passive: true});
     })();
     document.addEventListener('DOMContentLoaded', function() {
       const toggle = document.getElementById('themeToggle');
