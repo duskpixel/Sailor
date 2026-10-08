@@ -243,6 +243,36 @@ func (s *Server) opsFor(clusterID int64, loader func() (string, error)) *resops.
 	return &resops.Ops{ClusterID: clusterID, Pool: s.Pool, Loader: loader}
 }
 
+// ClusterNameLister 构建 kubectl 终端 Tab 补全用的资源名列表器：
+// 读同步缓存（微秒级），大集群也不卡；缓存未同步的类型自然无候选。
+func ClusterNameLister(st *store.Store) ksh.NamesFn {
+	return func(clusterID int64, kind, ns string) []string {
+		entry := st.GetCache(clusterID, kind)
+		if entry == nil {
+			return nil
+		}
+		var rows []map[string]interface{}
+		if json.Unmarshal(entry.Data, &rows) != nil {
+			return nil
+		}
+		names := make([]string, 0, len(rows))
+		for _, r := range rows {
+			name, _ := r["name"].(string)
+			if name == "" {
+				continue
+			}
+			if ns != "" {
+				if rns, _ := r["namespace"].(string); rns != ns {
+					continue
+				}
+			}
+			names = append(names, name)
+		}
+		sortStrings(names)
+		return names
+	}
+}
+
 // ─── 集群后台信息刷新（对应 _refresh_cluster_info）───────────
 
 func (s *Server) refreshClusterInfo(clusterID int64) {

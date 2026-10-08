@@ -4,6 +4,7 @@
 package ksh
 
 import (
+	"fmt"
 	"io"
 	"unicode/utf8"
 )
@@ -21,6 +22,9 @@ type liner struct {
 
 	onSubmit func(line string)
 	onEOF    func() // 空行 Ctrl+D
+	// onTab：补全回调。返回要插入的文本（可为空）与候选列表；
+	// 多候选无公共前缀时由 liner 换行列出并重画当前行（bash 行为）。
+	onTab func(line string) (insert string, options []string)
 }
 
 func newLiner(prompt string, out io.Writer, onSubmit func(string), onEOF func()) *liner {
@@ -29,6 +33,46 @@ func newLiner(prompt string, out io.Writer, onSubmit func(string), onEOF func())
 
 func (l *liner) showPrompt() {
 	l.out.Write([]byte(l.prompt))
+}
+
+// tab 补全分派：唯一候选 / 公共前缀 → 插入并回显；多候选 → 换行列出
+// （最多 40 个）后重画提示符与当前行；无候选 → 响铃。
+func (l *liner) tab() {
+	if l.onTab == nil {
+		return
+	}
+	insert, options := l.onTab(string(l.buf))
+	if insert != "" {
+		l.buf = append(l.buf, insert...)
+		l.out.Write([]byte(insert))
+		return
+	}
+	if len(options) == 0 {
+		l.out.Write([]byte("\a"))
+		return
+	}
+	if len(options) == 1 {
+		done := options[0] + " "
+		l.buf = append(l.buf, done...)
+		l.out.Write([]byte(done))
+		return
+	}
+	l.out.Write([]byte("\r\n"))
+	shown := options
+	if len(shown) > 40 {
+		shown = shown[:40]
+	}
+	for i, opt := range shown {
+		if i > 0 {
+			l.out.Write([]byte("  "))
+		}
+		l.out.Write([]byte(opt))
+	}
+	if len(options) > 40 {
+		fmt.Fprintf(l.out, "  …(+%d)", len(options)-40)
+	}
+	l.out.Write([]byte("\r\n"))
+	l.redraw()
 }
 
 func (l *liner) feed(chunk []byte) {
@@ -76,6 +120,8 @@ func (l *liner) feed(chunk []byte) {
 		case 0x0c: // Ctrl+L：清屏
 			l.out.Write([]byte("\x1b[2J\x1b[H"))
 			l.redraw()
+		case 0x09: // Tab：命令补全（回调由 Session 注入）
+			l.tab()
 		case 0x04: // Ctrl+D：空行 = EOF 退出；非空行忽略
 			if len(l.buf) == 0 && l.onEOF != nil {
 				l.onEOF()

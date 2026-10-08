@@ -66,17 +66,23 @@ type Session struct {
 	running  *runningCmd // 非空 = 前台命令运行中（定义见 runner.go）
 }
 
+// NamesFn 按集群/类型/命名空间返回资源名列表（webui 注入，读同步缓存，
+// 微秒级）。ns 为空表示不过滤（cluster-scoped 或全量）。
+type NamesFn func(clusterID int64, kind, ns string) []string
+
 // Manager 会话表 + 本地 WS 网关。
 type Manager struct {
 	mu       sync.Mutex
 	sessions map[string]*Session
 
+	names NamesFn // Tab 补全的资源名来源；nil = 不补全名字
+
 	ln     net.Listener
 	server *http.Server
 }
 
-func NewManager() *Manager {
-	return &Manager{sessions: map[string]*Session{}}
+func NewManager(names NamesFn) *Manager {
+	return &Manager{sessions: map[string]*Session{}, names: names}
 }
 
 // Start 在 127.0.0.1 随机端口上启动 WS 网关，返回端口。
@@ -239,6 +245,9 @@ func (m *Manager) Open(clusterID int64, clusterName string, kubeconfigLoader fun
 	}
 	s.ID = newToken()
 	s.liner = newLiner(promptFor(clusterName), s.out, s.submitLine, s.Close)
+	s.liner.onTab = func(line string) (insert string, options []string) {
+		return s.complete(string(line))
+	}
 	// 输出也算活跃：断连后持续产出的会话（logs -f）不该被空闲回收
 	s.out.onTouch = s.touch
 
@@ -334,7 +343,7 @@ func (s *Session) attach(conn *websocket.Conn) {
 	s.booted = true
 	fmt.Fprintf(s.out, "\x1b[1;36mSailor 内置 kubectl\x1b[0m（库 %s）\r\n", kubectlLibVersion)
 	fmt.Fprintf(s.out, "集群：%s\r\n", s.Cluster)
-	fmt.Fprintf(s.out, "直接输入子命令（kubectl 前缀可省略）· ↑/↓ 历史 · Ctrl+C 中断 · exit 退出\r\n")
+	fmt.Fprintf(s.out, "直接输入子命令（kubectl 前缀可省略）· Tab 补全 · ↑/↓ 历史 · Ctrl+C 中断 · exit 退出\r\n")
 	fmt.Fprintf(s.out, "edit 转应用内 YAML 编辑器 · 不支持：diff / port-forward / proxy / plugin（依赖外部进程）\r\n")
 	s.liner.showPrompt()
 }

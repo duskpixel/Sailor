@@ -235,6 +235,211 @@ func sortedKeys(m map[string]string) []string {
 	return keys
 }
 
+// ─── Tab 补全 ─────────────────────────────────────────────────
+
+// kubectlVerbs 内置 kubectl v0.37 的子命令表（静态维护，与链接的库同版本）。
+var kubectlVerbs = []string{
+	"annotate", "api-resources", "api-versions", "apply", "attach", "auth",
+	"autoscale", "certificate", "cluster-info", "completion", "config",
+	"cordon", "cp", "create", "debug", "delete", "describe", "diff",
+	"drain", "edit", "events", "exec", "explain", "expose", "get",
+	"kustomize", "label", "logs", "options", "patch", "plugin",
+	"port-forward", "proxy", "replace", "rollout", "run", "scale", "set",
+	"taint", "top", "uncordon", "version", "wait",
+}
+
+var builtinWords = []string{"clear", "exit", "help", "quit"}
+
+// completionKinds 补全用的类型词表（别名/复数/全称 → 内部 kind）。
+// 比 editAliases 宽：node / pv 等 Sailor 详情页没有的类型也补全——
+// get / describe 等真实子命令认它们，只是名字补全没有缓存来源。
+var completionKinds = func() map[string]string {
+	m := map[string]string{}
+	for k, v := range editAliases {
+		m[k] = v
+		if _, ok := m[v]; !ok {
+			m[v] = v
+		}
+	}
+	for _, e := range [][2]string{
+		{"node", "node"}, {"nodes", "node"}, {"no", "node"},
+		{"persistentvolume", "persistentvolume"}, {"persistentvolumes", "persistentvolume"}, {"pv", "persistentvolume"},
+		{"endpoints", "endpoints"}, {"endpoint", "endpoints"}, {"ep", "endpoints"},
+		{"replicaset", "replicaset"}, {"replicasets", "replicaset"}, {"rs", "replicaset"},
+	} {
+		m[e[0]] = e[1]
+	}
+	return m
+}()
+
+// clusterScopedKinds 这些类型不带命名空间（-n 过滤不适用）。
+var clusterScopedKinds = map[string]bool{
+	"namespace": true, "node": true, "persistentvolume": true,
+}
+
+// complete 行编辑器的 Tab 回调：返回（插入文本, 候选列表）。
+// 按位置推断意图：首词=动词；-n 后=命名空间；类型词后=资源名（读同步
+// 缓存，微秒级）；type/name 形式补名字部分；logs/exec 的首个参数直接
+// 补 Pod 名；rollout 补子命令。
+func (s *Session) complete(line string) (string, []string) {
+	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		fields = []string{""}
+	}
+	endsSpace := strings.HasSuffix(line, " ")
+	word := fields[len(fields)-1]
+	if endsSpace {
+		word = ""
+	} else {
+		fields = fields[:len(fields)-1] // fields = 已完成的词
+	}
+	prev := ""
+	if len(fields) > 0 {
+		prev = fields[len(fields)-1]
+	}
+
+	// -n / --namespace 后面：命名空间名
+	if prev == "-n" || prev == "--namespace" {
+		return pickNames(s.namesOf("namespace", ""), word)
+	}
+
+	// type/name 形式：补 "/" 后的名字部分（保留已输入的 type/ 前缀）
+	if i := strings.LastIndex(word, "/"); i > 0 {
+		typ, part := word[:i], word[i+1:]
+		if kind, ok := completionKinds[typ]; ok {
+			ins, opts := pickNames(s.namesOf(kind, s.nsFor(kind, nsFlagValue(fields))), part)
+			if opts != nil {
+				for i := range opts {
+					opts[i] = typ + "/" + opts[i]
+				}
+			}
+			return ins, opts
+		}
+		return "", nil
+	}
+
+	// 首词：动词 + 内建
+	// 汇总位置参数（剔除 flag 与 -n 的值），再按位置推断意图
+	var pos []string
+	for i := 0; i < len(fields); i++ {
+		f := fields[i]
+		if f == "-n" || f == "--namespace" {
+			i++ // 连值一起跳过
+			continue
+		}
+		if strings.HasPrefix(f, "-") {
+			continue // 其余 flag 单 token
+		}
+		pos = append(pos, f)
+	}
+	if len(pos) == 0 {
+		words := append([]string{}, builtinWords...)
+		words = append(words, kubectlVerbs...)
+		return pickWords(words, word)
+	}
+
+	// 特例动词：logs/exec 首个位置参数直接是 Pod 名；rollout 补子命令
+	switch pos[0] {
+	case "logs", "exec":
+		if len(pos) == 1 {
+			return pickNames(s.namesOf("pod", s.nsFor("pod", nsFlagValue(fields))), word)
+		}
+	case "rollout":
+		if len(pos) == 1 {
+			return pickWords([]string{"history", "pause", "restart", "resume", "status", "undo"}, word)
+		}
+	}
+
+	// 最后一个位置参数是类型词 → 补资源名（pos>=2 确保不是动词位）
+	if len(pos) >= 2 {
+		if kind, ok := completionKinds[pos[len(pos)-1]]; ok {
+			return pickNames(s.namesOf(kind, s.nsFor(kind, nsFlagValue(fields))), word)
+		}
+	}
+
+	// 动词后的第一个位置参数：类型词
+	if len(pos) == 1 {
+		return pickWords(sortedKeys(completionKinds), word)
+	}
+	return "", nil
+}
+
+// nsFor 类型是否带命名空间：显式 -n 优先；cluster-scoped 恒空；
+// 其余缺省 default（与 kubectl 默认一致）。
+func (s *Session) nsFor(kind, nsFlag string) string {
+	if clusterScopedKinds[kind] {
+		return ""
+	}
+	if nsFlag != "" {
+		return nsFlag
+	}
+	return "default"
+}
+
+func (s *Session) namesOf(kind, ns string) []string {
+	if s.m == nil || s.m.names == nil {
+		return nil
+	}
+	return s.m.names(s.ClusterID, kind, ns)
+}
+
+// nsFlagValue 从已输入词里找 -n x / --namespace x / --namespace=x。
+func nsFlagValue(fields []string) string {
+	for i, f := range fields {
+		if f == "-n" || f == "--namespace" {
+			if i+1 < len(fields) {
+				return fields[i+1]
+			}
+		}
+		if strings.HasPrefix(f, "--namespace=") {
+			return strings.TrimPrefix(f, "--namespace=")
+		}
+	}
+	return ""
+}
+
+// pickWords 静态词表补全：前缀过滤后，唯一候选 → 补全 + 空格；
+// 多候选 → 补公共前缀（有延伸时）或列出。
+func pickWords(words []string, word string) (string, []string) {
+	sorted := append([]string{}, words...)
+	sort.Strings(sorted)
+	return pick(sorted, word, true)
+}
+
+func pickNames(names []string, word string) (string, []string) {
+	return pick(names, word, false)
+}
+
+func pick(cands []string, word string, trailingSpace bool) (string, []string) {
+	matched := []string{}
+	for _, c := range cands {
+		if strings.HasPrefix(c, word) {
+			matched = append(matched, c)
+		}
+	}
+	switch len(matched) {
+	case 0:
+		return "", nil
+	case 1:
+		ins := matched[0][len(word):]
+		if trailingSpace {
+			ins += " "
+		}
+		return ins, nil
+	}
+	// 公共前缀有延伸 → 只补前缀（bash 行为）；无延伸 → 列出
+	prefix := matched[0]
+	for _, c := range matched[1:] {
+		for !strings.HasPrefix(c, prefix) {
+			prefix = prefix[:len(prefix)-1]
+		}
+	}
+	if len(prefix) > len(word) {
+		return prefix[len(word):], nil
+	}
+	return "", matched
+}
+
 const helpText = `内建命令：
   exit / quit / logout   关闭会话
   clear                  清屏

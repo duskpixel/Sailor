@@ -55,7 +55,7 @@ func readUntil(t *testing.T, conn *websocket.Conn, want string) string {
 // TestSessionRoundtrip 走完整链路：open → WS 拨号 → 横幅/提示符 →
 // 行编辑回显 → kubectl 库真执行 version --client → exit 退出帧。
 func TestSessionRoundtrip(t *testing.T) {
-	m := NewManager()
+	m := NewManager(nil)
 	port, err := m.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +115,7 @@ func TestSessionRoundtrip(t *testing.T) {
 
 // TestOpenRejectsBadKubeconfig 坏 kubeconfig 在 open 阶段就报 400。
 func TestOpenRejectsBadKubeconfig(t *testing.T) {
-	m := NewManager()
+	m := NewManager(nil)
 	_, status, err := m.Open(2, "bad", func() (string, error) { return "{{{{not yaml", nil })
 	if err == nil {
 		t.Fatal("坏 kubeconfig 应当报错")
@@ -138,7 +138,7 @@ func dialKsh(t *testing.T, port int, token string) *websocket.Conn {
 // TestSessionResume 验证会话与连接解耦：断连后会话存活，重连回放滚动缓冲，
 // 显式 Close 后会话才真正结束。
 func TestSessionResume(t *testing.T) {
-	m := NewManager()
+	m := NewManager(nil)
 	port, err := m.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -207,7 +207,7 @@ func TestSessionResume(t *testing.T) {
 
 // TestAttachRejectsWrongCluster attach 校验会话归属集群。
 func TestAttachRejectsWrongCluster(t *testing.T) {
-	m := NewManager()
+	m := NewManager(nil)
 	info, _, err := m.Open(1, "a", func() (string, error) { return fakeKubeconfig, nil })
 	if err != nil {
 		t.Fatal(err)

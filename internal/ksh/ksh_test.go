@@ -252,3 +252,134 @@ func TestPromptFor(t *testing.T) {
 		t.Errorf("提示符异常: %q", p)
 	}
 }
+
+// fakeNames 固定名字表：kind → 名字列表。
+func fakeNames(clusterID int64, kind, ns string) []string {
+	table := map[string][]string{
+		"deployment": {"api-gateway", "web-frontend", "web-worker"},
+		"pod":        {"api-gateway-7d9c", "web-frontend-5f2a"},
+		"namespace":  {"default", "kube-system", "kube-public", "uat"},
+	}
+	return table[kind]
+}
+
+func newTestSession() *Session {
+	m := NewManager(fakeNames)
+	return &Session{ClusterID: 1, Cluster: "t", m: m}
+}
+
+func TestCompleteVerbs(t *testing.T) {
+	s := newTestSession()
+	// 唯一候选：ge → 补 "t "
+	ins, opts := s.complete("ge")
+	if ins != "t " || opts != nil {
+		t.Errorf("complete(ge) = (%q,%v), want (\"t \",nil)", ins, opts)
+	}
+	// 多候选无公共延伸：d 开头动词列出
+	_, opts = s.complete("d")
+	if len(opts) < 2 { // debug/delete/describe/diff/drain
+		t.Errorf("complete(d) 应列出多候选, got %v", opts)
+	}
+	for _, o := range opts {
+		if !strings.HasPrefix(o, "d") {
+			t.Errorf("候选 %q 未按前缀过滤", o)
+		}
+	}
+	// 内建也在首词候选里
+	ins, _ = s.complete("exi")
+	if ins != "t " {
+		t.Errorf("complete(exi) = %q, want \"t \"", ins)
+	}
+}
+
+func TestCompleteKinds(t *testing.T) {
+	s := newTestSession()
+	ins, opts := s.complete("get de")
+	if ins != "ploy" { // deploy 与 deployments 公共前缀 deploy
+		t.Errorf("complete(get de) = %q, want \"ploy\"", ins)
+	}
+	_, opts = s.complete("get ")
+	if len(opts) == 0 {
+		t.Errorf("complete(get ) 应列出类型词表")
+	}
+	found := false
+	for _, o := range opts {
+		if o == "deployment" { found = true }
+	}
+	if !found {
+		t.Errorf("类型候选应含 deployment")
+	}
+}
+
+func TestCompleteNames(t *testing.T) {
+	s := newTestSession()
+	// 唯一名字：补全（不带尾空格，名字常是最后一个参数）
+	ins, opts := s.complete("get deploy api")
+	if ins != "-gateway" || opts != nil {
+		t.Errorf("complete(get deploy api) = (%q,%v), want (\"-gateway\",nil)", ins, opts)
+	}
+	// 多名字公共前缀：web-frontend / web-worker → 补 "web"
+	ins, _ = s.complete("get deploy web")
+	if ins != "-" { // web-frontend / web-worker 公共前缀是 "web-"（含连字符）
+		t.Errorf("complete(get deploy web) = %q, want \"-\"", ins)
+	}
+	_, opts = s.complete("get deploy web-")
+	if len(opts) != 2 {
+		t.Errorf("complete(get deploy web) 应 2 候选, got %v", opts)
+	}
+	// -n 过滤：不同 ns 的同名也应全给出（fake 表不过滤 ns，此处验证 -n 解析不报错）
+	if _, opts := s.complete("get deploy -n uat "); len(opts) != 3 {
+		t.Errorf("complete(get deploy -n uat ) = %v", opts)
+	}
+}
+
+func TestCompleteTypeSlashName(t *testing.T) {
+	s := newTestSession()
+	ins, opts := s.complete("get deploy/api")
+	if ins != "-gateway" || opts != nil {
+		t.Errorf("complete(get deploy/api) = (%q,%v), want (\"-gateway\",nil)", ins, opts)
+	}
+	_, opts = s.complete("delete deploy/web")
+	for _, o := range opts {
+		if !strings.HasPrefix(o, "deploy/") {
+			t.Errorf("候选 %q 应保持 type/ 前缀", o)
+		}
+	}
+}
+
+func TestCompleteNamespace(t *testing.T) {
+	s := newTestSession()
+	ins, _ := s.complete("get pods -n kube-s")
+	if ins != "ystem" {
+		t.Errorf("complete(-n kube-s) = %q, want \"ystem\"", ins)
+	}
+	// kube- 前缀多候选 → 列出
+	if _, opts := s.complete("get pods -n kube-"); len(opts) < 2 {
+		t.Errorf("complete(-n kube-) 应列出多候选, got %v", opts)
+	}
+}
+
+func TestCompleteLogsRollout(t *testing.T) {
+	s := newTestSession()
+	// logs 首参直接补 Pod 名
+	ins, _ := s.complete("logs api")
+	if ins != "-gateway-7d9c" {
+		t.Errorf("complete(logs api) = %q", ins)
+	}
+	// rollout 子命令
+	ins, _ = s.complete("rollout re")
+	if ins != "s" { // restart / resume 公共前缀 "res"，word "re" → 插 "s"
+		t.Errorf("complete(rollout re) = %q, want \"s\"", ins)
+	}
+	if _, opts := s.complete("rollout "); len(opts) != 6 {
+		t.Errorf("complete(rollout ) 候选数 %d, want 6", len(opts))
+	}
+}
+
+func TestCompleteNoCandidates(t *testing.T) {
+	s := newTestSession()
+	ins, opts := s.complete("zzz")
+	if ins != "" || opts != nil {
+		t.Errorf("无候选应返回空, got (%q,%v)", ins, opts)
+	}
+}

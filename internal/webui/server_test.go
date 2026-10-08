@@ -54,7 +54,7 @@ func testServer(t *testing.T) *Server {
 		Pool:    pool,
 		Syncer:  syncer.New(st, pool),
 		Exec:    execsess.NewManager(pool, st),
-		Ksh:     ksh.NewManager(),
+		Ksh:     ksh.NewManager(nil),
 		Tpl:     tpl,
 		Version: "2.0.0-test",
 		WSPort:  9999,
