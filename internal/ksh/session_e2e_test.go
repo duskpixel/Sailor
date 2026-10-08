@@ -172,13 +172,22 @@ func TestSessionResume(t *testing.T) {
 
 	conn2 := dialKsh(t, port, info.Session)
 	defer conn2.Close()
-	// 回放应包含断连前的命令输出 + 恢复提示
-	replay := readUntil(t, conn2, "连接已恢复")
-	if !strings.Contains(replay, "Client Version") {
-		t.Error("回放内容缺少断连前的命令输出")
-	}
+	// 回放应包含断连前的命令输出；恢复必须完全静默（无任何提示文本）
+	replay := readUntil(t, conn2, "Client Version")
 	if !strings.Contains(replay, "Sailor 内置 kubectl") {
 		t.Error("回放内容缺少横幅")
+	}
+	if strings.Contains(replay, "恢复") {
+		t.Error("恢复不应输出任何提示文本（应无感知）")
+	}
+	// 静默恢复后链路应继续可用：再跑一条命令
+	_ = conn2.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	if err := conn2.WriteMessage(websocket.BinaryMessage, []byte("version --client\r")); err != nil {
+		t.Fatal(err)
+	}
+	out := readUntil(t, conn2, "Client Version")
+	if !strings.Contains(out, "version --client") {
+		t.Error("恢复后命令回显缺失")
 	}
 
 	// 显式关闭后：attach 404，拨号被拒

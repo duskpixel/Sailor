@@ -322,28 +322,21 @@ func (m *Manager) handleWS(w http.ResponseWriter, r *http.Request) {
 	conn.Close()
 }
 
-// attach 绑定连接。首次打印横幅；重连先回放滚动缓冲（rebind 内完成），再补
-// 一行恢复提示；空闲状态下重画提示符（把断连前的半行整理成整行）。
+// attach 绑定连接。首次打印横幅 + 提示符；重连完全无感：滚动缓冲已在
+// rebind 里整段回放，终端画面停在断开前的原样（提示符/半行输入都在缓冲
+// 尾部），不再输出任何“已恢复”类提示，输入从原处继续。
 func (s *Session) attach(conn *websocket.Conn) {
 	s.out.rebind(conn)
 	s.touch()
-	if !s.booted {
-		s.booted = true
-		fmt.Fprintf(s.out, "\x1b[1;36mSailor 内置 kubectl\x1b[0m（库 %s）\r\n", kubectlLibVersion)
-		fmt.Fprintf(s.out, "集群：%s\r\n", s.Cluster)
-		fmt.Fprintf(s.out, "直接输入子命令（kubectl 前缀可省略）· ↑/↓ 历史 · Ctrl+C 中断 · exit 退出\r\n")
-		fmt.Fprintf(s.out, "不支持：edit / diff / port-forward / proxy / plugin（依赖外部进程）\r\n")
-		s.liner.showPrompt()
+	if s.booted {
 		return
 	}
-	fmt.Fprint(s.out, "\r\n\x1b[33m—— 连接已恢复（会话保持中）——\x1b[0m\r\n")
-	s.mu.Lock()
-	running := s.running != nil
-	s.mu.Unlock()
-	if !running {
-		s.out.ensureNewline()
-		s.liner.showPrompt()
-	}
+	s.booted = true
+	fmt.Fprintf(s.out, "\x1b[1;36mSailor 内置 kubectl\x1b[0m（库 %s）\r\n", kubectlLibVersion)
+	fmt.Fprintf(s.out, "集群：%s\r\n", s.Cluster)
+	fmt.Fprintf(s.out, "直接输入子命令（kubectl 前缀可省略）· ↑/↓ 历史 · Ctrl+C 中断 · exit 退出\r\n")
+	fmt.Fprintf(s.out, "不支持：edit / diff / port-forward / proxy / plugin（依赖外部进程）\r\n")
+	s.liner.showPrompt()
 }
 
 // detach 断开指定连接（按身份比对：接管后旧连接的断开不得拆掉新连接）。

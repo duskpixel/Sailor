@@ -14,8 +14,12 @@
 <style>[x-cloak]{display:none!important}</style>
 <div x-data="kshTerminal()" x-cloak x-show="visible"
      @open-ksh.window="open($event.detail)"
-     class="fixed bottom-0 right-0 z-50 flex flex-col bg-base-100 border-t border-base-300 shadow-2xl overflow-hidden transition-all duration-200"
-     :class="[sidebarOpen ? 'left-60' : 'left-16', expanded ? 'h-[42vh]' : 'h-11']">
+     class="fixed bottom-0 right-0 z-50 flex flex-col bg-base-100 border-t border-base-300 shadow-2xl overflow-hidden"
+     :class="[sidebarOpen ? 'left-60' : 'left-16', dragging ? '' : 'transition-all duration-200']"
+     :style="'height:' + (expanded ? height : 50) + 'px'">
+  <!-- 高度手柄：按住抽屉上缘上下拖（收起状态下拖拽会先展开） -->
+  <div class="h-1.5 flex-shrink-0 cursor-row-resize bg-base-300/50 hover:bg-primary/50 active:bg-primary/70 transition-colors"
+       title="拖动调整高度" @pointerdown="startResize($event)"></div>
   <!-- 标题栏：抽屉收起时它是贴边的细条，点击整条切换展开/收起 -->
   <div class="h-11 flex items-center justify-between px-4 border-b border-base-300 bg-base-200/70 cursor-pointer select-none flex-shrink-0 group"
        @click="toggle()">
@@ -67,14 +71,45 @@ function kshTerminal() {
   return {
     clusterId: 0, cluster: '', session: '',
     connected: false, starting: false, reconnecting: false, error: null,
-    expanded: true, visible: false,
+    expanded: true, visible: false, height: 300, dragging: false,
     _term: null, _fit: null, _ws: null, _onResize: null, _closing: false, _retryTimer: null,
 
     // Alpine 组件初始化：恢复上一页留下的会话
     init() {
+      const saved = parseInt(sessionStorage.getItem('sailor.ksh.height') || '', 10);
+      this.height = saved >= 160 ? saved : Math.round(window.innerHeight * 0.42);
+      this._clampHeight();
       this.restore();
-      // 收起细条常驻底部时，给页面内容让出 44px，避免盖住列表最后一行
-      this.$watch('visible', v => document.body.style.paddingBottom = v ? '44px' : '');
+      // 收起细条常驻底部时，给页面内容让出高度，避免盖住列表最后一行
+      this.$watch('visible', v => document.body.style.paddingBottom = v ? '50px' : '');
+    },
+
+    _clampHeight() {
+      this.height = Math.max(160, Math.min(window.innerHeight - 48, this.height));
+    },
+
+    // 拖拽上缘调整高度；松手持久化。xterm 随动 fit。
+    startResize(e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      e.preventDefault();
+      this.dragging = true;
+      if (!this.expanded) { this.expanded = true; this._persist(); }
+      const move = (ev) => {
+        this.height = Math.round(window.innerHeight - ev.clientY);
+        this._clampHeight();
+        if (this._fit && this._term) this._fit.fit();
+      };
+      const up = () => {
+        this.dragging = false;
+        sessionStorage.setItem('sailor.ksh.height', String(this.height));
+        this._refit();
+        document.body.style.userSelect = '';
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+      };
+      document.body.style.userSelect = 'none';
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
     },
 
     statusText() {
