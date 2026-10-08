@@ -625,19 +625,22 @@ function dashboard() {
       };
     },
 
-    // 四张图共用的玻璃 tooltip 与动效：240ms 是 DESIGN.md 的动效上限
-    // （ECharts 默认 1s 动画 violates the 契约），tooltip 用驾驶舱黑玻璃
-    // + menu 级阴影，与弹窗/下拉同族
+    // 四张图共用的 tooltip 与动效：240ms 是 DESIGN.md 的动效上限
+    // （ECharts 默认 1s 动画 violates the 契约）。tooltip 是实底玻璃感
+    // （驾驶舱黑 96%）——刻意不用 backdrop-filter：背景是持续漂移的
+    // GSAP 光斑，模糊层每帧重采样在 WKWebView 下表现为悬停闪烁，
+    // 且玻璃本就只属于导航 chrome（Chrome-Only Glass Rule）
     _chartBase(t) {
       return {
         animationDuration: 240,
         animationDurationUpdate: 240,
         animationEasing: 'cubicOut',
         tooltip: {
-          backgroundColor: t.isDark ? 'rgba(11, 15, 20, 0.92)' : 'rgba(255, 255, 255, 0.96)',
+          backgroundColor: t.isDark ? 'rgba(11, 15, 20, 0.96)' : 'rgba(255, 255, 255, 0.98)',
           borderColor: t.grid,
+          padding: [8, 12],
           textStyle: { color: t.text, fontSize: 11 },
-          extraCssText: 'backdrop-filter: blur(12px); border-radius: 8px; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);',
+          extraCssText: 'border-radius: 8px; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);',
         },
       };
     },
@@ -656,7 +659,6 @@ function dashboard() {
     renderCapacityChart() {
       const t = this._chartTheme();
       const base = this._chartBase(t);
-      const names = this.nodes.map(n => n.name.length > 20 ? n.name.substring(0, 18) + '...' : n.name);
 
       const chart = this._chart('capacityBar');
       chart.setOption({
@@ -665,7 +667,9 @@ function dashboard() {
         legend: { data: ['CPU (核)', '内存 (GB)'], textStyle: { color: t.text, fontSize: 11, opacity: 0.8 }, top: 0 },
         grid: { left: 10, right: 30, top: 30, bottom: 5, containLabel: true },
         xAxis: { type: 'value', axisLabel: { color: t.text, fontSize: 10, opacity: 0.6, fontFamily: t.mono }, splitLine: { lineStyle: { color: t.grid, opacity: 0.6 } } },
-        yAxis: { type: 'category', data: names, axisLabel: { color: t.text, fontSize: 10, opacity: 0.75, fontFamily: t.mono }, inverse: true },
+        // 节点名按可用宽度原生截断（悬停 tooltip 显示全名），不再手写
+        // 字符数截断——不同名字长度下手写截断要么显示不全要么浪费宽度
+        yAxis: { type: 'category', data: this.nodes.map(n => n.name), axisLabel: { color: t.text, fontSize: 10, opacity: 0.75, fontFamily: t.mono, width: 118, overflow: 'truncate' }, inverse: true },
         series: [
           { name: 'CPU (核)', type: 'bar', data: this.nodes.map(n => n.cpu_capacity), itemStyle: { color: t.info, borderRadius: [0, 4, 4, 0] }, barGap: '10%' },
           { name: '内存 (GB)', type: 'bar', data: this.nodes.map(n => n.mem_capacity_gb), itemStyle: { color: t.accent, borderRadius: [0, 4, 4, 0] } },
@@ -679,18 +683,14 @@ function dashboard() {
 
       // Sort nodes by CPU usage and get top 10
       const cpuSorted = [...this.nodes].sort((a, b) => b.cpu_percent - a.cpu_percent).slice(0, 10);
-      const cpuNames = cpuSorted.map(n => n.name.length > 15 ? n.name.substring(0, 13) + '..' : n.name);
-      const cpuData = cpuSorted.map(n => n.cpu_percent);
 
       // Sort nodes by Memory usage and get top 10
       const memSorted = [...this.nodes].sort((a, b) => b.mem_percent - a.mem_percent).slice(0, 10);
-      const memNames = memSorted.map(n => n.name.length > 15 ? n.name.substring(0, 13) + '..' : n.name);
-      const memData = memSorted.map(n => n.mem_percent);
 
       // 使用率阈值色（Fixed-Semantics）：>80 信号弹红、>60 灯笼琥珀、
       // 其余声呐绿——容量类（capacity / pie）用天际灯蓝 + 雷达青
       const usageColor = val => (val > 80 ? t.error : val > 60 ? t.warning : t.success);
-      const top10Option = (names, data, sorted, label) => ({
+      const top10Option = (sorted, label) => ({
         ...base,
         tooltip: {
           ...base.tooltip,
@@ -704,19 +704,20 @@ function dashboard() {
           splitLine: { lineStyle: { color: t.grid, opacity: 0.6, type: 'dashed' } },
         },
         yAxis: {
-          type: 'category', data: names, inverse: true,
-          axisLabel: { color: t.text, fontSize: 10, opacity: 0.75, fontFamily: t.mono },
+          // 原生按宽度截断，悬停 tooltip 显示全名
+          type: 'category', data: sorted.map(n => n.name), inverse: true,
+          axisLabel: { color: t.text, fontSize: 10, opacity: 0.75, fontFamily: t.mono, width: 108, overflow: 'truncate' },
           axisLine: { lineStyle: { color: t.grid } },
         },
         series: [{
-          type: 'bar', data,
+          type: 'bar', data: sorted.map(n => n[label === 'CPU' ? 'cpu_percent' : 'mem_percent']),
           itemStyle: { color: p => usageColor(p.value), borderRadius: [0, 4, 4, 0] },
           label: { show: true, position: 'right', color: t.text, fontSize: 10, fontFamily: t.mono, formatter: '{c}%' },
         }],
       });
 
-      this._chart('cpuTop10').setOption(top10Option(cpuNames, cpuData, cpuSorted, 'CPU'), true);
-      this._chart('memTop10').setOption(top10Option(memNames, memData, memSorted, '内存'), true);
+      this._chart('cpuTop10').setOption(top10Option(cpuSorted, 'CPU'), true);
+      this._chart('memTop10').setOption(top10Option(memSorted, '内存'), true);
 
       // Resource Distribution Pie
       const resourcePie = this._chart('resourcePie');
@@ -726,18 +727,22 @@ function dashboard() {
       resourcePie.setOption({
         ...base,
         tooltip: { ...base.tooltip, trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+        // 环上的引线标签在小卡片里会撞图例/出界——数量信息直接并入图例
+        // 文案，环本身不再带标签
         legend: {
           orient: 'vertical', right: 10, top: 'center',
           textStyle: { color: t.text, fontSize: 10, opacity: 0.75 },
+          formatter: name => name + '  ' + (name === 'CPU 节点' ? cpuNodeCount : gpuNodeCount),
         },
         series: [
           {
-            type: 'pie', radius: ['40%', '70%'], center: ['40%', '50%'],
+            type: 'pie', radius: ['45%', '72%'], center: ['38%', '50%'],
             data: [
               { value: cpuNodeCount, name: 'CPU 节点', itemStyle: { color: t.info } },
               { value: gpuNodeCount, name: 'GPU 节点', itemStyle: { color: t.accent } },
             ],
-            label: { color: t.text, fontSize: 10 },
+            label: { show: false },
+            labelLine: { show: false },
             emphasis: { itemStyle: { shadowBlur: 8, shadowOffsetX: 0, shadowColor: 'rgba(0, 0, 0, 0.25)' } },
           },
         ],
