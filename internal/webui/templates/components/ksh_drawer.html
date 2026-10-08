@@ -13,6 +13,7 @@
 {{define "ksh_drawer"}}
 <style>[x-cloak]{display:none!important}</style>
 <div x-data="kshTerminal()" x-cloak x-show="visible"
+     @open-ksh.window="open($event.detail)"
      class="fixed bottom-0 right-0 z-50 flex flex-col bg-base-100 border-t border-base-300 shadow-2xl overflow-hidden transition-all duration-200"
      :class="[sidebarOpen ? 'left-60' : 'left-16', expanded ? 'h-[42vh]' : 'h-11']">
   <!-- 标题栏：抽屉收起时它是贴边的细条，点击整条切换展开/收起 -->
