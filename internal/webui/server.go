@@ -104,6 +104,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /resources/{id}/pods/{ns}/{pod}/logs/{$}", s.podLogsAPI)
 	mux.HandleFunc("POST /resources/{id}/pods/{ns}/{pod}/exec/open/{$}", s.podExecOpen)
 	mux.HandleFunc("POST /resources/{id}/pods/{ns}/{pod}/exec/close/{$}", s.podExecClose)
+	mux.HandleFunc("POST /resources/{id}/pods/{ns}/{pod}/debug/add/{$}", s.podDebugAdd)
 	mux.HandleFunc("POST /resources/{id}/ksh/open/{$}", s.kshOpen)
 	mux.HandleFunc("POST /resources/{id}/ksh/attach/{$}", s.kshAttach)
 	mux.HandleFunc("POST /resources/{id}/ksh/close/{$}", s.kshClose)

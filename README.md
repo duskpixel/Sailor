@@ -200,7 +200,9 @@ kubeconfig 用 **AES-256-GCM** 加密后落盘，密钥为数据目录下随机�
   `autoscaling.keda.sh/paused-replicas` 注解；未安装 KEDA 的集群自动收起
   KEDA 菜单（直链访问时显示引导空态）
 - **诊断**：Pod 日志（tail 行数 / 上次日志 / 3 秒自动刷新）、容器终端、
-  容器层卡点 reason 高亮（`ImagePullBackOff` 等）
+  一键注入临时调试容器（ephemeral container，等价 `kubectl debug`：
+  预置 busybox / netshoot / curl 镜像或自定义，注入后直接进入终端；随
+  Pod 生命周期，不触发重建）、容器层卡点 reason 高亮（`ImagePullBackOff` 等）
 - **kubectl 终端**：进程内 kubectl 命令树 REPL，无需本机安装 kubectl
 - **节点**：Cordon / Uncordon / Drain（policy/v1 Eviction）/ 移除
 

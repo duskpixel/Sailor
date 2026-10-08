@@ -67,6 +67,13 @@
               @click="r.status_phase == 'Running' && $dispatch('open-pod-exec', {namespace: r.namespace, podName: r.name, execBase: '/resources/{{.Content.Cluster.ID}}/pods/' + r.namespace + '/' + r.name + '/exec/'})">
         <i class="fas fa-terminal"></i>
       </button>
+      {{/* 注入临时调试容器（ephemeral container，等价 kubectl debug）：容器须在
+           运行的 Pod 里才会被调度启动。共享 distroless/无 shell 镜像的排查路径。 */}}
+      <button type="button" class="row-action" title="注入调试容器" :disabled="r.status_phase != 'Running'"
+              :class="r.status_phase != 'Running' ? 'opacity-30 cursor-not-allowed' : ''"
+              @click="r.status_phase == 'Running' && $dispatch('open-pod-debug', {namespace: r.namespace, podName: r.name, debugBase: '/resources/{{.Content.Cluster.ID}}/pods/' + r.namespace + '/' + r.name + '/debug/', execBase: '/resources/{{.Content.Cluster.ID}}/pods/' + r.namespace + '/' + r.name + '/exec/'})">
+        <i class="fas fa-bug"></i>
+      </button>
       <span class="row-action-sep"></span>
       <button type="button" class="row-action is-danger" title="删除" @click="$dispatch('open-delete-modal', {type: 'Pod', name: r.name, namespace: r.namespace, deleteUrl: '/resources/{{.Content.Cluster.ID}}/delete/pod/' + r.namespace + '/' + r.name + '/'})">
         <i class="fas fa-trash-alt"></i>

@@ -1120,6 +1120,68 @@ Pod 终端（exec）。故意不放 .modal-backdrop：终端里随手点一下�
   </div>
 </dialog>
 
+{{/*
+注入临时调试容器（ephemeral container，等价 kubectl debug --image）。
+选镜像 → 后端注入并等 Running → 直接复用容器终端弹窗进入。
+提示文案必须讲清 K8s 约束：临时容器随 Pod 生命周期，写进去删不掉。
+*/}}
+<dialog id="debugModal" class="modal" x-data="podDebugAdd()"
+        @open-pod-debug.window="open($event.detail)">
+  <div class="modal-box bg-base-100 border border-base-300 shadow-2xl p-0"
+       style="max-width: 540px; border-radius: 20px;">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-base-300 flex-shrink-0 bg-base-200/50">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl grid place-items-center shadow-lg bg-warning/20">
+          <i class="fas fa-bug text-sm text-warning"></i>
+        </div>
+        <div>
+          <span class="font-semibold text-base text-base-content">注入调试容器</span>
+          <div class="text-xs mt-0.5 opacity-60" x-text="namespace + ' / ' + podName"></div>
+        </div>
+      </div>
+      <button class="btn btn-ghost btn-sm btn-circle h-9 w-9 min-h-0" title="关闭"
+              @click="$el.closest('dialog').close()">
+        <i class="fas fa-times text-sm"></i>
+      </button>
+    </div>
+
+    <div class="px-6 py-5 space-y-4">
+      <div>
+        <div class="text-xs font-semibold opacity-70 mb-2">选择调试镜像</div>
+        <div class="flex flex-wrap gap-2">
+          <template x-for="p in presets" :key="p.name">
+            <button type="button" class="btn btn-xs rounded-lg font-normal"
+                    :class="image === p.name ? 'btn-primary' : 'btn-ghost border border-base-300'"
+                    :disabled="busy" @click="image = p.name" :title="p.title" x-text="p.label"></button>
+          </template>
+          <button type="button" class="btn btn-xs rounded-lg font-normal"
+                  :class="image === '__custom' ? 'btn-primary' : 'btn-ghost border border-base-300'"
+                  :disabled="busy" @click="image = '__custom'">自定义…</button>
+        </div>
+      </div>
+      <div x-show="image === '__custom'" x-cloak>
+        <input type="text" x-model="custom" :disabled="busy" placeholder="例如 registry.example.com/tools/troubleshoot:v1"
+               class="input input-sm input-bordered w-full font-mono text-xs" @keydown.enter="submit()" />
+      </div>
+      <div class="text-[11px] leading-relaxed opacity-60 bg-base-200/60 rounded-lg px-3 py-2">
+        <i class="fas fa-circle-info mr-1"></i>
+        临时容器注入后<i class="font-semibold">无法单独移除</i>，随 Pod 生命周期存在（删除 / 重启 Pod 即清理）；
+        不占用 Pod 的 spec.containers，不触发滚动重建。首次使用需现场拉取镜像，可能等待一两分钟。
+      </div>
+      <div x-show="error" x-cloak class="text-xs text-error break-all leading-relaxed" x-text="error"></div>
+    </div>
+
+    <div class="flex items-center justify-end gap-2 px-6 py-4 border-t border-base-300 bg-base-200/30">
+      <button class="btn btn-ghost btn-sm" :disabled="busy" @click="$el.closest('dialog').close()">取消</button>
+      <button class="btn btn-warning btn-sm gap-2" :disabled="busy || !effectiveImage" @click="submit()">
+        <span x-show="busy" class="loading loading-spinner loading-xs"></span>
+        <span x-text="busy ? '注入中（拉取镜像可能较慢）…' : '注入并进入终端'"></span>
+      </button>
+    </div>
+  </div>
+  <form method="dialog" class="modal-backdrop"><button>close</button></form>
+</dialog>
+
 <!-- CSRF Token -->
 
 {{/*
@@ -1935,6 +1997,59 @@ function podExecTerminal() {
       this.session = '';
       this.connected = false;
       this.starting = false;
+    },
+  };
+}
+
+// 注入临时调试容器（kubectl debug 等价物）。由 open-pod-debug 事件触发，
+// detail 带 debugBase / execBase。成功后直接派发 open-pod-exec 进入该容器。
+function podDebugAdd() {
+  return {
+    namespace: '', podName: '', debugBase: '', execBase: '',
+    image: 'busybox', custom: '', busy: false, error: null,
+    presets: [
+      {name: 'busybox', label: 'busybox', title: '轻量通用：sh / 网络工具基础'},
+      {name: 'nicolaka/netintools', label: 'netshoot', title: '网络排查全家桶：tcpdump / dig / curl / iptables 等'},
+      {name: 'curlimages/curl', label: 'curl', title: '只有 curl，体积最小'},
+    ],
+    get effectiveImage() {
+      return this.image === '__custom' ? (this.custom || '').trim() : this.image;
+    },
+
+    open(detail) {
+      this.namespace = detail.namespace;
+      this.podName = detail.podName;
+      this.debugBase = detail.debugBase;
+      this.execBase = detail.execBase;
+      this.image = 'busybox';
+      this.custom = '';
+      this.busy = false;
+      this.error = null;
+      document.getElementById('debugModal').showModal();
+    },
+
+    submit() {
+      const image = this.effectiveImage;
+      if (!image) { this.error = '请填写镜像名'; return; }
+      this.busy = true;
+      this.error = null;
+      fetch(this.debugBase + 'add/', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+        body: JSON.stringify({image}),
+      }).then(r => r.json().then(d => ({ok: r.ok, data: d})))
+        .then(({ok, data}) => {
+          this.busy = false;
+          if (!ok || !data.success) {
+            this.error = (data && data.error) || '注入调试容器失败';
+            return;
+          }
+          document.getElementById('debugModal').close();
+          // 复用容器终端弹窗，直接进入刚注入的调试容器
+          window.dispatchEvent(new CustomEvent('open-pod-exec', {
+            detail: {namespace: this.namespace, podName: this.podName, container: data.container, execBase: this.execBase},
+          }));
+        }).catch(e => { this.busy = false; this.error = e.message; });
     },
   };
 }

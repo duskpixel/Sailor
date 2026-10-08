@@ -776,6 +776,49 @@ func (s *Server) podExecClose(w http.ResponseWriter, r *http.Request) {
 	JSON(w, 200, map[string]interface{}{"success": true})
 }
 
+// podDebugAdd 注入临时调试容器（ephemeral container）并等待其 Running，
+// 返回容器名供前端直接开终端。镜像现场拉取，整体给到 100s。
+func (s *Server) podDebugAdd(w http.ResponseWriter, r *http.Request) {
+	c, loader, ok := s.clusterCtx(w, r, r.PathValue("id"))
+	if !ok {
+		return
+	}
+	ns, pod := r.PathValue("ns"), r.PathValue("pod")
+	var body struct {
+		Image  string `json:"image"`
+		Target string `json:"target"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || trimSpace(body.Image) == "" {
+		JSONError(w, 400, "镜像不能为空")
+		return
+	}
+	image := trimSpace(body.Image)
+	if strings.ContainsAny(image, " \t\"'") {
+		JSONError(w, 400, "镜像名不合法")
+		return
+	}
+
+	o := s.opsFor(c.ID, loader)
+	ctx, cancel := context.WithTimeout(r.Context(), 100*time.Second)
+	defer cancel()
+
+	name, err := o.AddDebugContainer(ctx, ns, pod, image, trimSpace(body.Target))
+	if err != nil {
+		JSONError(w, 500, fmt.Sprintf("注入调试容器失败：%v", err))
+		return
+	}
+	if err := o.WaitDebugContainerRunning(ctx, ns, pod, name, 80*time.Second); err != nil {
+		// 容器已经写进 Pod（删不掉），把容器名带回去让用户稍后手动 exec
+		JSON(w, 500, map[string]interface{}{
+			"success":   false,
+			"error":     fmt.Sprintf("%v（容器 %s 已注入，可稍后在 kubectl 终端 exec -c %s 重试）", err, name, name),
+			"container": name,
+		})
+		return
+	}
+	JSON(w, 200, map[string]interface{}{"success": true, "container": name})
+}
+
 // kshOpen 打开内置 kubectl 终端会话（返回一次性 token 的 WS 地址）。
 func (s *Server) kshOpen(w http.ResponseWriter, r *http.Request) {
 	c, loader, ok := s.clusterCtx(w, r, r.PathValue("id"))
