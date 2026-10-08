@@ -588,8 +588,53 @@ function dashboard() {
     _chart(id) {
       if (!this._charts[id]) {
         this._charts[id] = echarts.init(document.getElementById(id));
+        this._bindLabelTip(this._charts[id]);
       }
       return this._charts[id];
+    },
+
+    // y 轴节点名标签：canvas 文字选不中、悬停在标签区也不触发图表的
+    // axis tooltip——补一个原生 DOM 小浮层（全名可选中复制），点击
+    // 标签一键复制（toast 反馈）。
+    _bindLabelTip(chart) {
+      const tip = document.createElement('div');
+      tip.style.cssText = 'display:none;position:fixed;z-index:60;padding:6px 10px;border-radius:8px;' +
+        'font:11px ui-monospace,SFMono-Regular,Menlo,monospace;user-select:all;cursor:text;' +
+        'box-shadow:0 10px 15px -3px rgb(0 0 0 / 0.1);white-space:nowrap;';
+      document.body.appendChild(tip);
+      const hide = () => { tip.style.display = 'none'; };
+
+      chart.on('mouseover', params => {
+        if (params.componentType !== 'yAxis' || !params.value) return;
+        const cs = getComputedStyle(document.documentElement);
+        const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+        tip.textContent = params.value; // 标签名即节点全名（truncate 只影响画布显示）
+        tip.style.background = isDark ? 'rgba(11, 15, 20, 0.96)' : 'rgba(255, 255, 255, 0.98)';
+        tip.style.color = (cs.getPropertyValue('--color-base-content') || '').trim() || '#d6deeb';
+        tip.style.border = '1px solid ' + ((cs.getPropertyValue('--color-base-300') || '').trim() || '#31333d');
+        const ev = params.event && (params.event.event || params.event);
+        if (ev && ev.clientX != null) {
+          tip.style.left = ev.clientX + 'px';
+          tip.style.top = (ev.clientY - 36) + 'px';
+        }
+        tip.style.display = 'block';
+        chart.getZr().setCursorStyle('copy');
+      });
+      chart.on('mouseout', params => {
+        if (params.componentType !== 'yAxis') return;
+        hide();
+        chart.getZr().setCursorStyle('default');
+      });
+      chart.on('click', params => {
+        if (params.componentType !== 'yAxis' || !params.value) return;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(params.value).then(() => {
+            if (typeof showToast === 'function') showToast('节点名已复制：' + params.value, 'success');
+          });
+        }
+      });
+      chart.getZr().on('globalout', () => { hide(); chart.getZr().setCursorStyle('default'); });
+      tip.addEventListener('mouseleave', hide);
     },
 
     // 容器尺寸变化时统一 resize：窗口缩放、侧栏开合改变内容区宽度、
@@ -629,7 +674,7 @@ function dashboard() {
         grid: { left: 10, right: 30, top: 30, bottom: 5, containLabel: true },
         xAxis: { type: 'value', axisLabel: { color: textColor, fontSize: 11 }, splitLine: { lineStyle: { color: gridColor } } },
         // 原生按可用宽度截断（悬停 tooltip 显示全名），不再手写字符数截断
-        yAxis: { type: 'category', data: names, axisLabel: { color: textColor, fontSize: 11, width: 118, overflow: 'truncate' }, inverse: true },
+        yAxis: { type: 'category', data: names, triggerEvent: true, axisLabel: { color: textColor, fontSize: 11, width: 118, overflow: 'truncate' }, inverse: true },
         series: [
           { name: 'CPU (核)', type: 'bar', data: this.nodes.map(n => n.cpu_capacity), itemStyle: { color: '#f59e0b', borderRadius: [0, 4, 4, 0] }, barGap: '10%' },
           { name: '内存 (GB)', type: 'bar', data: this.nodes.map(n => n.mem_capacity_gb), itemStyle: { color: '#10b981', borderRadius: [0, 4, 4, 0] } },
@@ -668,7 +713,7 @@ function dashboard() {
           splitLine: { lineStyle: { color: gridColor, type: 'dashed' } }
         },
         yAxis: {
-          type: 'category', data: cpuNames, inverse: true,
+          type: 'category', data: cpuNames, inverse: true, triggerEvent: true,
           axisLabel: { color: textColor, fontSize: 10, width: 108, overflow: 'truncate' },
           axisLine: { lineStyle: { color: gridColor } }
         },
@@ -706,7 +751,7 @@ function dashboard() {
           splitLine: { lineStyle: { color: gridColor, type: 'dashed' } }
         },
         yAxis: {
-          type: 'category', data: memNames, inverse: true,
+          type: 'category', data: memNames, inverse: true, triggerEvent: true,
           axisLabel: { color: textColor, fontSize: 10, width: 108, overflow: 'truncate' },
           axisLine: { lineStyle: { color: gridColor } }
         },
