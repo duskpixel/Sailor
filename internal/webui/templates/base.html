@@ -323,15 +323,17 @@
         <span class="sidebar-label">Secrets</span>
       </a>
     </nav>
-    {{/* 侧栏滚动位置跨页面保持：必须紧跟 </nav> 在解析期同步执行——放在
-         页面底部会晚于首帧，新页面先把菜单画在顶部、再跳回保存位置，
-         滚动过的用户每次点菜单都会看到这个跳动（＝闪屏）。 */}}
+    {{/* 侧栏滚动位置跨页面保持。恢复动作必须进 rAF：解析期直接设 scrollTop
+         会强制对半成品 DOM 同步布局，WebKit 趁机先画一帧"只有侧栏、内容区
+         空白"的乐观帧，随后内容才补上 —— 滚动过的用户每次点菜单都看到这个
+         空帧闪烁（saved=0 的用户跳过赋值，所以无感）。rAF 在解析推进后的
+         下一帧绘制前执行，第一帧就是正确的滚动位置，两全。 */}}
     <script>
     (function() {
       const nav = document.getElementById('sidebarNav');
       if (!nav) return;
       const saved = parseInt(sessionStorage.getItem('sailor.sidebarScroll') || '0', 10);
-      if (saved > 0) nav.scrollTop = saved;
+      if (saved > 0) requestAnimationFrame(function() { nav.scrollTop = saved; });
       let timer = null;
       nav.addEventListener('scroll', function() {
         if (timer) return;
