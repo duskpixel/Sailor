@@ -14,21 +14,32 @@
 <style>[x-cloak]{display:none!important}</style>
 <div x-data="kshTerminal()" x-cloak x-show="visible"
      @open-ksh.window="open($event.detail)"
+     x-transition:enter="duration-200 ease-out"
+     x-transition:enter-start="opacity-0 translate-y-4"
+     x-transition:enter-end="opacity-100 translate-y-0"
+     x-transition:leave="duration-150 ease-in"
+     x-transition:leave-start="opacity-100 translate-y-0"
+     x-transition:leave-end="opacity-0 translate-y-4"
      class="fixed bottom-4 right-0 z-50 flex flex-col bg-base-100 border-t border-x border-base-300 rounded-t-2xl shadow-2xl overflow-hidden"
      :class="[sidebarOpen ? 'left-60' : 'left-16', dragging ? '' : 'transition-all duration-200']"
-     :style="'height:' + (expanded ? height : 50) + 'px'">
-  <!-- 高度手柄：按住抽屉上缘上下拖（收起状态下拖拽会先展开） -->
-  <div class="h-1.5 flex-shrink-0 cursor-row-resize bg-base-300/50 hover:bg-primary/50 active:bg-primary/70 transition-colors"
-       title="拖动调整高度" @pointerdown="startResize($event)"></div>
+     :style="'height:' + (expanded ? height : 56) + 'px'">
+  <!-- 高度手柄：常驻可见的握柄（贴边细条也能一眼认出可拖），双击折叠/展开 -->
+  <div class="group/handle h-3 flex-shrink-0 cursor-row-resize grid place-items-center"
+       title="拖动调整高度（双击收起/展开）"
+       @pointerdown="startResize($event)" @dblclick="toggle()">
+    <div class="h-0.5 w-10 rounded-full bg-base-content/15 group-hover/handle:bg-primary/60 transition-colors"></div>
+  </div>
   <!-- 标题栏：抽屉收起时它是贴边的细条，点击整条切换展开/收起 -->
   <div class="h-11 flex items-center justify-between px-4 border-b border-base-300 bg-base-200/70 cursor-pointer select-none flex-shrink-0 group"
        @click="toggle()">
     <div class="flex items-center gap-3 min-w-0">
-      <i class="fas fa-terminal text-sm text-primary"></i>
+      <div class="w-9 h-9 rounded-xl grid place-items-center bg-primary/15 flex-shrink-0">
+        <i class="fas fa-terminal text-sm text-primary"></i>
+      </div>
       <span class="font-semibold text-sm text-base-content">kubectl 终端</span>
       <span x-show="cluster" class="px-2 py-0.5 rounded-md text-xs bg-primary/15 text-primary truncate max-w-[220px]"
             x-text="cluster"></span>
-      <span class="flex items-center gap-1.5 text-[11px]"
+      <span class="hidden sm:flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full bg-base-content/5"
             :class="connected ? 'text-success' : 'text-base-content/50'">
         <span class="w-1.5 h-1.5 rounded-full"
               :class="connected ? 'bg-success animate-pulse' : 'bg-base-content/40'"></span>
@@ -117,8 +128,8 @@ function kshTerminal() {
       this._themeObserver.observe(document.documentElement, {attributes: true, attributeFilter: ['data-theme']});
       this.restore();
       // 抽屉抬离底部 16px（bottom-4）：收起细条常驻时给页面内容让出
-      // 细条 50px + 底部边距 16px，避免盖住列表最后一行
-      this.$watch('visible', v => document.body.style.paddingBottom = v ? '66px' : '');
+      // 手柄 12 + 标题栏 44 + 底部边距 16，避免盖住列表最后一行
+      this.$watch('visible', v => document.body.style.paddingBottom = v ? '72px' : '');
     },
 
     _clampHeight() {
