@@ -1,0 +1,189 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-08T00:00:00+08:00",
+  "title": "Design System: Sailor",
+  "extensions": {
+    "colorMeta": {
+      "signal-indigo": {
+        "role": "primary",
+        "displayName": "深海信号靛 Deep-Water Signal Indigo",
+        "canonical": "oklch(58% 0.233 277.117)",
+        "lightThemeCanonical": "oklch(45% 0.24 277.023)",
+        "tonalRamp": [
+          "oklch(20% 0.06 277)",
+          "oklch(30% 0.1 277)",
+          "oklch(40% 0.16 277)",
+          "oklch(50% 0.21 277)",
+          "oklch(58% 0.233 277.117)",
+          "oklch(70% 0.18 277)",
+          "oklch(82% 0.12 277)",
+          "oklch(94% 0.04 277)"
+        ]
+      },
+      "rose-beacon": {
+        "role": "secondary",
+        "displayName": "玫瑰信标 Rose Beacon",
+        "canonical": "oklch(65% 0.241 354.308)",
+        "lightThemeCanonical": "oklch(58% 0.225 354.308)",
+        "tonalRamp": [
+          "oklch(22% 0.07 354)",
+          "oklch(32% 0.12 354)",
+          "oklch(42% 0.17 354)",
+          "oklch(52% 0.21 354)",
+          "oklch(65% 0.241 354.308)",
+          "oklch(76% 0.18 354)",
+          "oklch(87% 0.11 354)",
+          "oklch(96% 0.04 354)"
+        ]
+      },
+      "radar-teal": {
+        "role": "tertiary",
+        "displayName": "雷达青 Radar Teal",
+        "canonical": "oklch(77% 0.152 181.912)",
+        "lightThemeCanonical": "oklch(58% 0.12 195)",
+        "tonalRamp": [
+          "oklch(18% 0.04 182)",
+          "oklch(28% 0.06 182)",
+          "oklch(38% 0.09 182)",
+          "oklch(50% 0.12 182)",
+          "oklch(64% 0.14 182)",
+          "oklch(77% 0.152 181.912)",
+          "oklch(87% 0.1 182)",
+          "oklch(95% 0.04 182)"
+        ]
+      },
+      "abyss-slate": {
+        "role": "neutral",
+        "displayName": "深海板岩 Abyss Slate",
+        "canonical": "oklch(25.33% 0.016 252.42)",
+        "lightThemeCanonical": "oklch(100% 0 0)",
+        "tonalRamp": [
+          "oklch(13% 0.01 252)",
+          "oklch(17% 0.012 252)",
+          "oklch(21.15% 0.012 254.09)",
+          "oklch(23.26% 0.014 253.1)",
+          "oklch(25.33% 0.016 252.42)",
+          "oklch(45% 0.02 252)",
+          "oklch(70% 0.015 252)",
+          "oklch(97.807% 0.029 256.847)"
+        ]
+      },
+      "wheelhouse-black": {
+        "role": "neutral",
+        "displayName": "驾驶舱黑 Wheelhouse Black（终端底）",
+        "canonical": "#0b0f14",
+        "lightThemeCanonical": "#ffffff"
+      }
+    },
+    "typographyMeta": {
+      "body": { "displayName": "密集正文", "purpose": "列表与表单默认字号（12px）——高密度运维界面的密度契约。" },
+      "display": { "displayName": "仪表读数", "purpose": "仪表盘统计大数字（24px 语义色）。" },
+      "label": { "displayName": "仪器铭牌", "purpose": "侧栏分组、徽章、轴标签（10px，0.1em 字距）。" },
+      "mono": { "displayName": "测量字", "purpose": "资源名 / IP / YAML / 终端输出——被逐字符阅读的值。" }
+    },
+    "shadows": [
+      { "name": "overlay", "value": "0 25px 50px -12px rgb(0 0 0 / 0.25)", "purpose": "弹窗与底部抽屉——唯一的重阴影，表达真正悬浮。" },
+      { "name": "menu", "value": "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)", "purpose": "下拉菜单与浮层。" },
+      { "name": "card-hover", "value": "0 4px 12px oklch(0 0 0 / 0.1)", "purpose": "卡片悬停反馈（-2px 抬升），静止归零。" }
+    ],
+    "motion": [
+      { "name": "chrome", "value": "0.2s ease", "purpose": "侧栏折叠、顶栏位移等导航 chrome。" },
+      { "name": "state", "value": "0.15s ease", "purpose": "按钮 / 卡片状态过渡与表格行高亮（0.1s）。" },
+      { "name": "spring-lift", "value": "0.24s var(--ease-spring) translateY(-2px)", "purpose": "fx-card 悬停抬升；上限，不得更夸张。" },
+      { "name": "page-in", "value": "0.3s ease-out fadeIn", "purpose": "整页内容进场（服务端渲染整页跳转的衔接）。" }
+    ],
+    "breakpoints": [
+      { "name": "desktop-min", "value": "1080px", "note": "窗口最小宽度，无移动端断点（桌面应用）" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "主操作按钮：确认、注入调试容器等每屏至多一两个。",
+      "html": "<button class=\"ds-btn-primary\">注入并进入终端</button>",
+      "css": ".ds-btn-primary { background: var(--color-primary); color: var(--color-primary-content); border: none; border-radius: 8px; height: 32px; padding: 0 12px; font-size: 12px; font-weight: 600; transition: filter 0.15s ease; } .ds-btn-primary:hover { filter: brightness(1.1); } .ds-btn-primary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "次级操作与工具行按钮，悬停以 5–10% 内容色底回应。",
+      "html": "<button class=\"ds-btn-ghost\">取消</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: var(--color-base-content); border: 1px solid transparent; border-radius: 8px; height: 32px; padding: 0 12px; font-size: 12px; font-weight: 500; transition: background-color 0.15s ease; } .ds-btn-ghost:hover { background: color-mix(in oklab, var(--color-base-content) 8%, transparent); } .ds-btn-ghost:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }"
+    },
+    {
+      "name": "Sidebar Item",
+      "kind": "nav",
+      "refersTo": "sidebar-item",
+      "description": "侧栏导航项；激活态是主色最大消费场景（12% 透明底）。",
+      "html": "<a class=\"ds-sidebar-item ds-sidebar-item-active\"><svg width=\"14\" height=\"14\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><path d=\"M12 2 2 19h20L12 2zm0 5 6.6 11H5.4L12 7z\"/></svg><span>Deployments</span></a>",
+      "css": ".ds-sidebar-item { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 8px; font-size: 14px; color: var(--color-base-content); text-decoration: none; transition: background-color 0.2s ease; } .ds-sidebar-item:hover { background: color-mix(in oklab, var(--color-base-content) 5%, transparent); } .ds-sidebar-item-active { background: color-mix(in oklab, var(--color-primary) 12%, transparent); color: var(--color-primary); } .ds-sidebar-item svg { opacity: 0.6; } .ds-sidebar-item-active svg { opacity: 1; }"
+    },
+    {
+      "name": "Panel Section",
+      "kind": "card",
+      "refersTo": "panel-section",
+      "description": "已确立的单层表面语法：发丝边 + 40% 透明板岩底 + 12px 圆角 + 无阴影。",
+      "html": "<div class=\"ds-panel\"><div class=\"ds-panel-title\">基本信息</div><div class=\"ds-panel-row\"><span class=\"ds-panel-k\">命名空间</span><span class=\"ds-panel-v\">kube-system</span></div></div>",
+      "css": ".ds-panel { background: color-mix(in oklab, var(--color-base-200) 40%, transparent); border: 1px solid color-mix(in oklab, var(--color-base-300) 60%, transparent); border-radius: 12px; padding: 20px; } .ds-panel-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; margin-bottom: 16px; color: var(--color-base-content); } .ds-panel-row { display: flex; align-items: baseline; gap: 12px; font-size: 12px; } .ds-panel-k { opacity: 0.5; } .ds-panel-v { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--color-base-content); }"
+    },
+    {
+      "name": "Status Badge",
+      "kind": "chip",
+      "refersTo": "status-badge",
+      "description": "胶囊状态徽章：语义色 15% 底 + 30% 边 + 同色文字。",
+      "html": "<span class=\"ds-badge ds-badge-success\">Running</span> <span class=\"ds-badge ds-badge-error\">CrashLoopBackOff</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; gap: 4px; border-radius: 9999px; padding: 2px 8px; font-size: 10px; font-weight: 600; letter-spacing: 0.02em; } .ds-badge-success { background: color-mix(in oklab, var(--color-success) 15%, transparent); border: 1px solid color-mix(in oklab, var(--color-success) 30%, transparent); color: var(--color-success); } .ds-badge-error { background: color-mix(in oklab, var(--color-error) 15%, transparent); border: 1px solid color-mix(in oklab, var(--color-error) 30%, transparent); color: var(--color-error); }"
+    },
+    {
+      "name": "Stat Tile",
+      "kind": "custom",
+      "refersTo": "panel-section",
+      "description": "统计 tile：居中图标 + 语义色大数字 + 标签，右上角 6% 同色光晕。",
+      "html": "<div class=\"ds-tile\"><div class=\"ds-tile-num ds-tile-success\">12</div><div class=\"ds-tile-label\">就绪</div></div>",
+      "css": ".ds-tile { position: relative; overflow: hidden; background: color-mix(in oklab, var(--color-base-200) 40%, transparent); border: 1px solid color-mix(in oklab, var(--color-base-300) 60%, transparent); border-radius: 12px; padding: 16px; text-align: center; } .ds-tile::after { content: ''; position: absolute; top: -20px; right: -20px; width: 80px; height: 80px; border-radius: 50%; opacity: 0.06; background: currentColor; } .ds-tile-num { font-size: 24px; font-weight: 700; } .ds-tile-success { color: var(--color-success); } .ds-tile-label { font-size: 12px; opacity: 0.5; margin-top: 4px; }"
+    },
+    {
+      "name": "Terminal Canvas",
+      "kind": "custom",
+      "refersTo": "terminal-canvas",
+      "description": "终端子调色板（驾驶舱黑 / 终端泡沫 / 罗盘青光标），亮色主题整组翻转。",
+      "html": "<div class=\"ds-term\"><span class=\"ds-term-prompt\">kubectl@uat $</span> get pods -A</div>",
+      "css": ".ds-term { background: #0b0f14; color: #d6deeb; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.5; padding: 12px 12px 20px; border-radius: 12px 12px 0 0; } .ds-term-prompt { color: #89ddff; font-weight: 600; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "深潜驾驶舱",
+    "overview": "Sailor 是一艘深潜器的驾驶舱：操作者坐在黑暗里，仪表悬浮在舷窗外漂移的光斑之上。系统默认呈现为深海暗色——蓝灰板岩的舱壁，泡沫白的读数，彩色光斑在固定网格海图上缓慢漂移。顶栏与侧栏是舱内玻璃仪表盘，内容则像打印在仪表板上的卡片，靠发丝线而非阴影彼此分层。真正悬浮在舱内的只有弹窗、底部抽屉与下拉菜单——它们才拥有重阴影。这是一个高密度运维界面：正文 12px、控件高 32px、行内图标操作代替文字按钮。亮色主题保留同一套信号色相，仅把板岩换成冷白纸面。",
+    "keyCharacteristics": [
+      "深海暗色为默认身份，亮色为同相位的\"甲板\"变体",
+      "玻璃只属于导航 chrome；内容表面是发丝边 + 半透明板岩，不磨砂",
+      "阴影是稀缺资源，只表达\"真的悬浮\"（弹窗 / 抽屉 / 下拉）",
+      "高密度信息排版：12px 正文、等宽数据字、胶囊状态徽章",
+      "交互反馈轻而快：100–240ms，卡片悬浮 -2px 微抬升"
+    ],
+    "rules": [
+      { "name": "The Signal-Rarity Rule", "body": "深海信号靛只用于\"当前与主操作\"：激活导航项、主按钮、链接、关键数字。任何屏幕上主色面积 ≤10%，它的稀缺就是它的信号强度。", "section": "colors" },
+      { "name": "The Fixed-Semantics Rule", "body": "声呐绿 = 健康 / 成功，灯笼琥珀 = 进行中 / 注意，信号弹红 = 异常 / 危险，天际灯蓝 = 中性信息。状态色永远表达状态，不挪作装饰或品牌点缀。", "section": "colors" },
+      { "name": "The Measured-Data Rule", "body": "凡是被复制、比对、逐字符阅读的值（资源名、命名空间、IP、哈希、YAML、终端输出）一律等宽；等宽不是\"技术感\"装饰。", "section": "typography" },
+      { "name": "The Chrome-Only Glass Rule", "body": "backdrop-filter 只属于顶栏与侧栏（含 strong 变体）。内容卡片、分节、表格永不磨砂——磨砂是\"舷窗\"，不是\"纸\"。", "section": "elevation" },
+      { "name": "The Floating-Shadow Rule", "body": "阴影只授予真正悬浮在界面之上的东西。静态内容一律发丝边框 + 色调分层；卡片内再嵌投影卡片是被禁止的。", "section": "elevation" }
+    ],
+    "dos": [
+      "Do 用语义 token 写颜色（bg-primary、text-success、bg-warning/10）——所有状态横幅、徽章、分节底色一律 token 化，双主题自动正确。",
+      "Do 数据值、资源名、终端输出用 font-mono。",
+      "Do 弹窗标题用 text-lg（18.75px）与正文拉开层级。",
+      "Do 新面板先复用\"分节面板\"（border + base-200/40 + 12px 圆角 + 无阴影）这个已确立的单层表面语法。",
+      "Do 交互反馈控制在 100–240ms，卡片微抬升 -2px 是上限。"
+    ],
+    "donts": [
+      "Don't 硬编码 hex 颜色（曾出现浅色横幅在暗色主题刺眼的问题，已全部 token 化）。",
+      "Don't 在卡片内再嵌带阴影的卡片；不用 border-left 彩条做强调。",
+      "Don't 给内容区加 backdrop-filter 或大面积渐变文字。",
+      "Don't 把状态色当装饰色用，或让主色面积超过一屏 10%。",
+      "Don't 降低信息密度换取留白——正文 12px、控件 32px 高是这个产品的密度契约。"
+    ]
+  }
+}
