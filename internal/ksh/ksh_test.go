@@ -76,7 +76,13 @@ func TestStripKubectlPrefix(t *testing.T) {
 }
 
 func TestUnsupportedSubcommands(t *testing.T) {
-	for _, name := range []string{"edit", "diff", "port-forward", "proxy", "plugin"} {
+	// edit 不在拦截名单里：被 routeEdit 转发到应用内 YAML 编辑器
+	for _, name := range []string{"edit"} {
+		if _, bad := unsupported[name]; bad {
+			t.Errorf("%q 不应被拦截（已路由到 YAML 编辑器）", name)
+		}
+	}
+	for _, name := range []string{"diff", "port-forward", "proxy", "plugin"} {
 		if _, bad := unsupported[name]; !bad {
 			t.Errorf("%q 应在不支持名单里", name)
 		}
@@ -84,6 +90,45 @@ func TestUnsupportedSubcommands(t *testing.T) {
 	for _, name := range []string{"get", "describe", "apply", "delete", "logs", "exec", "rollout", "scale", "top", "auth", "explain", "api-resources", "wait", "watch", "config"} {
 		if _, bad := unsupported[name]; bad {
 			t.Errorf("%q 不应被拦截", name)
+		}
+	}
+}
+
+func TestParseEditArgs(t *testing.T) {
+	cases := []struct {
+		in          []string
+		alias, name string
+		ns          string
+		hasNS       bool
+		wantErr     bool
+	}{
+		{in: []string{"edit", "deployment/nginx"}, alias: "deployment", name: "nginx"},
+		{in: []string{"edit", "deploy", "nginx"}, alias: "deploy", name: "nginx"},
+		{in: []string{"edit", "deployments", "web", "-n", "uat"}, alias: "deployments", name: "web", ns: "uat", hasNS: true},
+		{in: []string{"edit", "-n", "uat", "svc", "web"}, alias: "svc", name: "web", ns: "uat", hasNS: true},
+		{in: []string{"edit", "--namespace=uat", "cm", "cfg"}, alias: "cm", name: "cfg", ns: "uat", hasNS: true},
+		{in: []string{"edit", "po", "x"}, alias: "po", name: "x"},
+		{in: []string{"edit"}, wantErr: true},
+		{in: []string{"edit", "deploy"}, wantErr: true},
+		{in: []string{"edit", "deploy/nginx", "extra"}, wantErr: true},
+		{in: []string{"edit", "-o", "yaml", "deploy", "x"}, wantErr: true},
+		{in: []string{"edit", "deploy", "x", "-n"}, wantErr: true},
+	}
+	for _, tc := range cases {
+		alias, name, ns, hasNS, err := parseEditArgs(tc.in)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("parseEditArgs(%q) 应报错", tc.in)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("parseEditArgs(%q) 报错: %v", tc.in, err)
+			continue
+		}
+		if alias != tc.alias || name != tc.name || ns != tc.ns || hasNS != tc.hasNS {
+			t.Errorf("parseEditArgs(%q) = (%q,%q,%q,%v), want (%q,%q,%q,%v)",
+				tc.in, alias, name, ns, hasNS, tc.alias, tc.name, tc.ns, tc.hasNS)
 		}
 	}
 }

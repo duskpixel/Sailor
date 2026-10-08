@@ -335,7 +335,7 @@ func (s *Session) attach(conn *websocket.Conn) {
 	fmt.Fprintf(s.out, "\x1b[1;36mSailor 内置 kubectl\x1b[0m（库 %s）\r\n", kubectlLibVersion)
 	fmt.Fprintf(s.out, "集群：%s\r\n", s.Cluster)
 	fmt.Fprintf(s.out, "直接输入子命令（kubectl 前缀可省略）· ↑/↓ 历史 · Ctrl+C 中断 · exit 退出\r\n")
-	fmt.Fprintf(s.out, "不支持：edit / diff / port-forward / proxy / plugin（依赖外部进程）\r\n")
+	fmt.Fprintf(s.out, "edit 转应用内 YAML 编辑器 · 不支持：diff / port-forward / proxy / plugin（依赖外部进程）\r\n")
 	s.liner.showPrompt()
 }
 
@@ -444,6 +444,17 @@ func (w *wsWriter) ensureNewline() {
 	}
 	w.ring = append(w.ring, '\r', '\n')
 	w.lastNL = true
+}
+
+// sendControl 发一条 JSON 文本控制帧（前端按 type 分发；exit 是其特例）。
+func (w *wsWriter) sendControl(payload map[string]string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.conn == nil {
+		return
+	}
+	msg, _ := json.Marshal(payload)
+	w.conn.WriteMessage(websocket.TextMessage, msg)
 }
 
 // sendExit 会话结束时发 {type:"exit"} 文本帧并断开当前连接。

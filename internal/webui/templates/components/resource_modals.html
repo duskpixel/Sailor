@@ -3,7 +3,15 @@
 {{/* 弹窗骨架全部走主题 token（bg-base-100 / text-base-content / 语义色），
    不再内联硬编码深色 —— 否则亮色主题下整个弹窗是一块突兀的黑面板。
    Monaco 的编辑器配色由 monacoTheme() 单独跟随 data-theme（见下方脚本）。 */}}
-<dialog id="yamlModal" class="modal">
+{{/* open-ksh-yaml：kubectl 终端的 edit 命令转发而来（Go 侧已解析好
+     kind/name/namespace），这里构造 YAML 地址复用 openYaml 打开编辑弹窗 */}}
+<dialog id="yamlModal" class="modal"
+        @open-ksh-yaml.window="
+          const d = $event.detail;
+          const base = '/resources/' + d.clusterId + '/yaml/' + d.kind + '/';
+          const url = d.namespace ? base + d.namespace + '/' + d.name + '/' : base + d.name + '/';
+          const title = (d.kind.charAt(0).toUpperCase() + d.kind.slice(1)) + ': ' + d.name;
+          openYaml(title, url, d.kind !== 'pod')">
   <div class="modal-box flex flex-col p-0 shadow-2xl bg-base-100 text-base-content rounded-2xl border border-base-300" style="width: 90vw; max-width: 90vw; height: 90vh; max-height: 90vh;">
     <!-- 顶部标题栏 -->
     <div class="flex items-center justify-between px-6 py-4 border-b border-base-300">

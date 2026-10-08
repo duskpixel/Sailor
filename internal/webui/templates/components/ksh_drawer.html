@@ -375,10 +375,21 @@ function kshTerminal() {
             if (this._term) this._term.write(ev.data instanceof ArrayBuffer ? new Uint8Array(ev.data) : ev.data);
             return;
           }
-          try {
-            const msg = JSON.parse(ev.data);
-            if (msg.type === 'exit') this._onEnded();
-          } catch (e) { /* 忽略无法解析的控制帧 */ }
+        try {
+          const msg = JSON.parse(ev.data);
+          if (msg.type === 'exit') { this._onEnded(); return; }
+          // kubectl edit 转发：打开应用内 YAML 编辑器（仅资源列表页挂载了
+          // 编辑器组件；其他页面给出去向提示）
+          if (msg.type === 'yaml-edit') {
+            if (document.getElementById('yamlModal')) {
+              window.dispatchEvent(new CustomEvent('open-ksh-yaml', {detail: {
+                clusterId: this.clusterId, kind: msg.kind, name: msg.name, namespace: msg.namespace,
+              }}));
+            } else {
+              showToast('YAML 编辑器在资源页可用：从侧栏进入任意资源列表页（如 Deployments）再执行 edit', 'info');
+            }
+          }
+        } catch (e) { /* 忽略无法解析的控制帧 */ }
         };
         ws.onerror = () => {
           if (!this.connected) {

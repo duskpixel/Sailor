@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"sync"
 
@@ -121,12 +122,117 @@ func wantStdin(args []string) bool {
 
 // unsupported 在进程内跑不了的子命令：依赖外部进程（$EDITOR / diff）或
 // 是长驻网络进程。键为子命令名，值为给用户的提示。
+// edit 不在此列——它被 routeEdit 拦截转发到应用内 YAML 编辑器。
 var unsupported = map[string]string{
-	"edit":         "edit 依赖外部编辑器（$EDITOR），请改用资源的 YAML 编辑弹窗",
 	"diff":         "diff 依赖外部 diff 程序，内置终端暂不支持",
 	"port-forward": "port-forward 是长驻端口转发进程，请在自己的终端里运行",
 	"proxy":        "proxy 是长驻代理进程，请在自己的终端里运行",
 	"plugin":       "进程内执行不支持 kubectl 插件发现（krew 等插件不可用）",
+}
+
+// editAliases 把 edit 常见的简写 / 复数形式归一到内部 kind。
+// 与 k8sx.GVRs 的 kind 键一致；Sailor 资源页支持哪些就收录哪些。
+var editAliases = map[string]string{
+	"deploy": "deployment", "deployments": "deployment",
+	"sts": "statefulset", "statefulsets": "statefulset",
+	"ds": "daemonset", "daemonsets": "daemonset",
+	"po": "pod", "pods": "pod",
+	"svc": "service", "services": "service",
+	"ing": "ingress", "ingresses": "ingress",
+	"cm": "configmap", "configmaps": "configmap",
+	"secret": "secret", "secrets": "secret",
+	"job": "job", "jobs": "job",
+	"cj": "cronjob", "cronjobs": "cronjob",
+	"ns": "namespace", "namespaces": "namespace",
+	"pvc": "persistentvolumeclaim", "persistentvolumeclaims": "persistentvolumeclaim",
+	"hpa": "hpa", "hpas": "hpa",
+}
+
+// parseEditArgs 解析 edit 参数：edit <type>[/<name>] [name] [-n ns]。
+// 只认 -n / --namespace（含 = 形式）；其余 flag 一律报不支持，
+// 避免静默忽略 -o 之类改变行为的东西。
+func parseEditArgs(args []string) (kindAlias, name, namespace string, hasNS bool, err error) {
+	positionals := []string{}
+	for i := 1; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-n" || a == "--namespace":
+			if i+1 >= len(args) {
+				return "", "", "", false, fmt.Errorf("%s 缺少参数值", a)
+			}
+			namespace, hasNS = args[i+1], true
+			i++
+		case strings.HasPrefix(a, "--namespace="):
+			namespace, hasNS = strings.TrimPrefix(a, "--namespace="), true
+		case strings.HasPrefix(a, "-"):
+			return "", "", "", false, fmt.Errorf("edit 暂不支持参数 %s（当前支持 -n/--namespace）", a)
+		default:
+			positionals = append(positionals, a)
+		}
+	}
+	if len(positionals) == 0 {
+		return "", "", "", false, fmt.Errorf("用法：edit <类型>[/<名称>] [名称] [-n 命名空间]")
+	}
+	if strings.Contains(positionals[0], "/") {
+		parts := strings.SplitN(positionals[0], "/", 2)
+		kindAlias = parts[0]
+		if len(positionals) > 1 {
+			return "", "", "", false, fmt.Errorf("类型/名称 形式下不要再跟第二个位置参数")
+		}
+		if len(parts) != 2 || parts[1] == "" {
+			return "", "", "", false, fmt.Errorf("类型/名称 形式不完整")
+		}
+		name = parts[1]
+		return kindAlias, name, namespace, hasNS, nil
+	}
+	if len(positionals) < 2 {
+		return "", "", "", false, fmt.Errorf("用法：edit <类型> <名称> [-n 命名空间]")
+	}
+	return positionals[0], positionals[1], namespace, hasNS, nil
+}
+
+// routeEdit 把 kubectl edit 拦截转发到应用内 Monaco YAML 编辑器：
+// 真 edit 靠 $EDITOR 外部进程，内置终端走不了——改用 Sailor 自己的
+// 编辑弹窗（语法高亮 + 真实 dry-run 校验），体验反而更好。
+// 通过 WS 文本帧 {type:"yaml-edit"} 交给前端打开弹窗。
+func (s *Session) routeEdit(args []string) {
+	alias, name, ns, hasNS, err := parseEditArgs(args)
+	if err != nil {
+		fmt.Fprintf(s.out, "\x1b[33m%s\x1b[0m\r\n", err)
+		s.liner.showPrompt()
+		return
+	}
+	kind, ok := editAliases[alias]
+	if !ok {
+		fmt.Fprintf(s.out, "\x1b[33medit 暂支持：%s\x1b[0m\r\n", strings.Join(sortedKeys(editAliases), " "))
+		s.liner.showPrompt()
+		return
+	}
+	// namespace 是 cluster-scoped：URL 不带 ns 段；其余缺省 default（与
+	// 临时 kubeconfig 的默认上下文一致）
+	namespace := ns
+	if !hasNS && kind != "namespace" {
+		namespace = "default"
+	}
+	if kind == "namespace" {
+		namespace = ""
+	}
+	s.out.sendControl(map[string]string{
+		"type": "yaml-edit", "kind": kind, "name": name,
+		"namespace": namespace, "cluster": s.Cluster,
+	})
+	fmt.Fprintf(s.out, "\x1b[36m已转到 YAML 编辑器：%s %s\x1b[0m\r\n", kind, name)
+	fmt.Fprint(s.out, "在弹窗右上角打开「编辑模式」修改，点「应用到集群」生效（提交前走真实 dry-run 校验）。\r\n")
+	s.liner.showPrompt()
+}
+
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 const helpText = `内建命令：
@@ -170,6 +276,10 @@ func (s *Session) submitLine(line string) {
 	args = stripKubectlPrefix(args)
 	if len(args) == 0 {
 		s.liner.showPrompt()
+		return
+	}
+	if args[0] == "edit" {
+		s.routeEdit(args)
 		return
 	}
 	if reason, bad := unsupported[args[0]]; bad {
