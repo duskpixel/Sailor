@@ -453,3 +453,17 @@ func TestCompleteKubectlPrefix(t *testing.T) {
 		t.Errorf("complete(kubectl get deploy api) = %q", ins)
 	}
 }
+
+func TestEditAliasesCoverCanonicalForms(t *testing.T) {
+	// 每个内部 kind 的单数全称必须可解析（曾漏过 deployment/pod/service，
+	// 导致最标准的写法被拒，而 Tab 补全却又提示这些词）
+	kinds := []string{"deployment", "pod", "service", "ingress", "configmap",
+		"secret", "job", "cronjob", "namespace", "persistentvolumeclaim",
+		"hpa", "statefulset", "daemonset", "replicaset", "endpoints",
+		"scaledobject", "scaledjob"}
+	for _, k := range kinds {
+		if got := editAliases[k]; got != k {
+			t.Errorf("editAliases[%q] = %q, want 自身", k, got)
+		}
+	}
+}

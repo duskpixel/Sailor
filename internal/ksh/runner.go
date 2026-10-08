@@ -130,22 +130,27 @@ var unsupported = map[string]string{
 	"plugin":       "进程内执行不支持 kubectl 插件发现（krew 等插件不可用）",
 }
 
-// editAliases 把 edit 常见的简写 / 复数形式归一到内部 kind。
+// editAliases 把 edit 常见的写法归一到内部 kind：单数全称 / 复数 / 简写
+// 三种形态都收（补全的 completionKinds 继承本表，两者永远一致）。
 // 与 k8sx.GVRs 的 kind 键一致；Sailor 资源页支持哪些就收录哪些。
 var editAliases = map[string]string{
-	"deploy": "deployment", "deployments": "deployment",
-	"sts": "statefulset", "statefulsets": "statefulset",
-	"ds": "daemonset", "daemonsets": "daemonset",
-	"po": "pod", "pods": "pod",
-	"svc": "service", "services": "service",
-	"ing": "ingress", "ingresses": "ingress",
-	"cm": "configmap", "configmaps": "configmap",
+	"deployment": "deployment", "deployments": "deployment", "deploy": "deployment",
+	"statefulset": "statefulset", "statefulsets": "statefulset", "sts": "statefulset",
+	"daemonset": "daemonset", "daemonsets": "daemonset", "ds": "daemonset",
+	"pod": "pod", "pods": "pod", "po": "pod",
+	"service": "service", "services": "service", "svc": "service",
+	"ingress": "ingress", "ingresses": "ingress", "ing": "ingress",
+	"configmap": "configmap", "configmaps": "configmap", "cm": "configmap",
 	"secret": "secret", "secrets": "secret",
 	"job": "job", "jobs": "job",
-	"cj": "cronjob", "cronjobs": "cronjob",
-	"ns": "namespace", "namespaces": "namespace",
-	"pvc": "persistentvolumeclaim", "persistentvolumeclaims": "persistentvolumeclaim",
+	"cronjob": "cronjob", "cronjobs": "cronjob", "cj": "cronjob",
+	"namespace": "namespace", "namespaces": "namespace", "ns": "namespace",
+	"persistentvolumeclaim": "persistentvolumeclaim", "persistentvolumeclaims": "persistentvolumeclaim", "pvc": "persistentvolumeclaim",
 	"hpa": "hpa", "hpas": "hpa",
+	"replicaset": "replicaset", "replicasets": "replicaset", "rs": "replicaset",
+	"endpoints": "endpoints", "endpoint": "endpoints", "ep": "endpoints",
+	"scaledobject": "scaledobject", "scaledobjects": "scaledobject",
+	"scaledjob": "scaledjob", "scaledjobs": "scaledjob",
 }
 
 // parseEditArgs 解析 edit 参数：edit <type>[/<name>] [name] [-n ns]。
@@ -204,7 +209,11 @@ func (s *Session) routeEdit(args []string) {
 	}
 	kind, ok := editAliases[alias]
 	if !ok {
-		fmt.Fprintf(s.out, "\x1b[33medit 暂支持：%s\x1b[0m\r\n", strings.Join(sortedKeys(editAliases), " "))
+		// kubectl 认但 Sailor 资源表没有的类型（node/pv 等）与拼错区分开说
+		fmt.Fprintf(s.out, "\x1b[33medit 不认识类型 %q\x1b[0m\r\n", alias)
+		fmt.Fprintf(s.out, "支持：deployment、pod、service、configmap、secret、ingress、namespace、\r\n")
+		fmt.Fprintf(s.out, "　　　pvc、job、cronjob、hpa、statefulset、daemonset、replicaset、endpoints、scaledobject、scaledjob\r\n")
+		fmt.Fprintf(s.out, "（单数/复数/简写均可，如 deploy/pods/svc/cm；node、pv 等 Sailor 资源表未收录，暂不支持编辑）\r\n")
 		s.liner.showPrompt()
 		return
 	}
