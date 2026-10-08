@@ -14,7 +14,7 @@
 <style>[x-cloak]{display:none!important}</style>
 <div x-data="kshTerminal()" x-cloak x-show="visible"
      @open-ksh.window="open($event.detail)"
-     class="fixed bottom-0 right-0 z-50 flex flex-col bg-base-100 border-t border-base-300 shadow-2xl overflow-hidden"
+     class="fixed bottom-4 right-0 z-50 flex flex-col bg-base-100 border-t border-x border-base-300 rounded-t-2xl shadow-2xl overflow-hidden"
      :class="[sidebarOpen ? 'left-60' : 'left-16', dragging ? '' : 'transition-all duration-200']"
      :style="'height:' + (expanded ? height : 50) + 'px'">
   <!-- 高度手柄：按住抽屉上缘上下拖（收起状态下拖拽会先展开） -->
@@ -58,7 +58,7 @@
       <span class="text-xs text-error break-all" x-text="error"></span>
       <button class="btn btn-outline btn-error btn-xs" @click="retry()">重试</button>
     </div>
-    <div x-ref="term" class="absolute inset-0 px-3 py-2" @click="_term && _term.focus()"></div>
+    <div x-ref="term" class="absolute inset-0 px-3 pt-2 pb-3" @click="_term && _term.focus()"></div>
   </div>
 </div>
 
@@ -80,8 +80,9 @@ function kshTerminal() {
       this.height = saved >= 160 ? saved : Math.round(window.innerHeight * 0.42);
       this._clampHeight();
       this.restore();
-      // 收起细条常驻底部时，给页面内容让出高度，避免盖住列表最后一行
-      this.$watch('visible', v => document.body.style.paddingBottom = v ? '50px' : '');
+      // 抽屉抬离底部 16px（bottom-4）：收起细条常驻时给页面内容让出
+      // 细条 50px + 底部边距 16px，避免盖住列表最后一行
+      this.$watch('visible', v => document.body.style.paddingBottom = v ? '66px' : '');
     },
 
     _clampHeight() {
