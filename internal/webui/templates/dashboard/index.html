@@ -103,7 +103,7 @@
   {{end}}
 </div>
 {{else}}
-<div x-data="dashboard()" x-init="load(); $watch('nodeSearch', () => currentPage = 1); $watch('nodeSort', () => currentPage = 1)">
+<div x-data="dashboard()" x-init="load(); _watchTheme(); $watch('nodeSearch', () => currentPage = 1); $watch('nodeSort', () => currentPage = 1)">
 
   <!-- Cluster Quick Info -->
   <div class="flex flex-wrap items-center gap-2 mb-5">
@@ -606,30 +606,76 @@ function dashboard() {
       });
     },
 
+    // 图表主题：颜色一律取 CSS 变量（DESIGN.md 的航海仪器 token），
+    // 不再维护两套硬编码 hex。oklch 字符串 WKWebView / WebView2 的
+    // canvas 均直接支持。
+    _chartTheme() {
+      const cs = getComputedStyle(document.documentElement);
+      const v = (n, f) => (cs.getPropertyValue(n) || '').trim() || f;
+      return {
+        isDark: document.documentElement.getAttribute('data-theme') !== 'light',
+        text: v('--color-base-content', '#d6deeb'),
+        grid: v('--color-base-300', '#31333d'),
+        success: v('--color-success', '#22c55e'),
+        warning: v('--color-warning', '#f59e0b'),
+        error: v('--color-error', '#ef4444'),
+        info: v('--color-info', '#60a5fa'),
+        accent: v('--color-accent', '#2dd4bf'),
+        mono: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+      };
+    },
+
+    // 四张图共用的玻璃 tooltip 与动效：240ms 是 DESIGN.md 的动效上限
+    // （ECharts 默认 1s 动画 violates the 契约），tooltip 用驾驶舱黑玻璃
+    // + menu 级阴影，与弹窗/下拉同族
+    _chartBase(t) {
+      return {
+        animationDuration: 240,
+        animationDurationUpdate: 240,
+        animationEasing: 'cubicOut',
+        tooltip: {
+          backgroundColor: t.isDark ? 'rgba(11, 15, 20, 0.92)' : 'rgba(255, 255, 255, 0.96)',
+          borderColor: t.grid,
+          textStyle: { color: t.text, fontSize: 11 },
+          extraCssText: 'backdrop-filter: blur(12px); border-radius: 8px; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);',
+        },
+      };
+    },
+
+    // 主题切换：图表是 canvas，CSS 变量变了画布不会自己变——观察
+    // data-theme 随动重绘（与 Monaco / kubectl 终端同一模式）
+    _watchTheme() {
+      if (this._themeObs) return;
+      this._themeObs = new MutationObserver(() => {
+        if (this.hasMetrics) this.renderMetricsCharts();
+        else if (this.nodes.length > 0) this.renderCapacityChart();
+      });
+      this._themeObs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    },
+
     renderCapacityChart() {
-      const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-      const textColor = isDark ? '#a1a1aa' : '#52525b';
-      const gridColor = isDark ? '#27272a' : '#e4e4e7';
+      const t = this._chartTheme();
+      const base = this._chartBase(t);
       const names = this.nodes.map(n => n.name.length > 20 ? n.name.substring(0, 18) + '...' : n.name);
 
       const chart = this._chart('capacityBar');
       chart.setOption({
-        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: isDark ? '#1e1e2e' : '#fff', borderColor: gridColor, textStyle: { color: textColor, fontSize: 11 } },
-        legend: { data: ['CPU (核)', '内存 (GB)'], textStyle: { color: textColor, fontSize: 11 }, top: 0 },
+        ...base,
+        tooltip: { ...base.tooltip, trigger: 'axis', axisPointer: { type: 'shadow' } },
+        legend: { data: ['CPU (核)', '内存 (GB)'], textStyle: { color: t.text, fontSize: 11, opacity: 0.8 }, top: 0 },
         grid: { left: 10, right: 30, top: 30, bottom: 5, containLabel: true },
-        xAxis: { type: 'value', axisLabel: { color: textColor, fontSize: 11 }, splitLine: { lineStyle: { color: gridColor } } },
-        yAxis: { type: 'category', data: names, axisLabel: { color: textColor, fontSize: 11 }, inverse: true },
+        xAxis: { type: 'value', axisLabel: { color: t.text, fontSize: 10, opacity: 0.6, fontFamily: t.mono }, splitLine: { lineStyle: { color: t.grid, opacity: 0.6 } } },
+        yAxis: { type: 'category', data: names, axisLabel: { color: t.text, fontSize: 10, opacity: 0.75, fontFamily: t.mono }, inverse: true },
         series: [
-          { name: 'CPU (核)', type: 'bar', data: this.nodes.map(n => n.cpu_capacity), itemStyle: { color: '#f59e0b', borderRadius: [0, 4, 4, 0] }, barGap: '10%' },
-          { name: '内存 (GB)', type: 'bar', data: this.nodes.map(n => n.mem_capacity_gb), itemStyle: { color: '#10b981', borderRadius: [0, 4, 4, 0] } },
+          { name: 'CPU (核)', type: 'bar', data: this.nodes.map(n => n.cpu_capacity), itemStyle: { color: t.info, borderRadius: [0, 4, 4, 0] }, barGap: '10%' },
+          { name: '内存 (GB)', type: 'bar', data: this.nodes.map(n => n.mem_capacity_gb), itemStyle: { color: t.accent, borderRadius: [0, 4, 4, 0] } },
         ]
       }, true);
       chart.resize();
     },
     renderMetricsCharts() {
-      const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-      const textColor = isDark ? '#a1a1aa' : '#52525b';
-      const gridColor = isDark ? '#27272a' : '#e4e4e7';
+      const t = this._chartTheme();
+      const base = this._chartBase(t);
 
       // Sort nodes by CPU usage and get top 10
       const cpuSorted = [...this.nodes].sort((a, b) => b.cpu_percent - a.cpu_percent).slice(0, 10);
@@ -641,111 +687,60 @@ function dashboard() {
       const memNames = memSorted.map(n => n.name.length > 15 ? n.name.substring(0, 13) + '..' : n.name);
       const memData = memSorted.map(n => n.mem_percent);
 
-      // CPU Top 10 - Horizontal Bar
-      const cpuTop10 = this._chart('cpuTop10');
-      cpuTop10.setOption({
+      // 使用率阈值色（Fixed-Semantics）：>80 信号弹红、>60 灯笼琥珀、
+      // 其余声呐绿——容量类（capacity / pie）用天际灯蓝 + 雷达青
+      const usageColor = val => (val > 80 ? t.error : val > 60 ? t.warning : t.success);
+      const top10Option = (names, data, sorted, label) => ({
+        ...base,
         tooltip: {
+          ...base.tooltip,
           trigger: 'axis', axisPointer: { type: 'shadow' },
-          backgroundColor: isDark ? '#1e1e2e' : '#fff', borderColor: gridColor,
-          textStyle: { color: textColor, fontSize: 11 },
-          formatter: params => `<b>${cpuSorted[params[0].dataIndex].name}</b><br/>CPU: ${params[0].value}%`
+          formatter: params => `<b>${sorted[params[0].dataIndex].name}</b><br/>${label}: ${params[0].value}%`,
         },
         grid: { left: 10, right: 40, top: 10, bottom: 5, containLabel: true },
         xAxis: {
           type: 'value', max: 100,
-          axisLabel: { color: textColor, fontSize: 10, formatter: '{value}%' },
-          splitLine: { lineStyle: { color: gridColor, type: 'dashed' } }
+          axisLabel: { color: t.text, fontSize: 10, opacity: 0.6, fontFamily: t.mono, formatter: '{value}%' },
+          splitLine: { lineStyle: { color: t.grid, opacity: 0.6, type: 'dashed' } },
         },
         yAxis: {
-          type: 'category', data: cpuNames, inverse: true,
-          axisLabel: { color: textColor, fontSize: 10 },
-          axisLine: { lineStyle: { color: gridColor } }
+          type: 'category', data: names, inverse: true,
+          axisLabel: { color: t.text, fontSize: 10, opacity: 0.75, fontFamily: t.mono },
+          axisLine: { lineStyle: { color: t.grid } },
         },
         series: [{
-          type: 'bar', data: cpuData,
-          itemStyle: {
-            color: params => {
-              const val = params.value;
-              if (val > 80) return '#ef4444';
-              if (val > 60) return '#f59e0b';
-              return '#10b981';
-            },
-            borderRadius: [0, 4, 4, 0]
-          },
-          label: {
-            show: true, position: 'right', color: textColor,
-            fontSize: 10, formatter: '{c}%'
-          }
-        }]
-      }, true);
+          type: 'bar', data,
+          itemStyle: { color: p => usageColor(p.value), borderRadius: [0, 4, 4, 0] },
+          label: { show: true, position: 'right', color: t.text, fontSize: 10, fontFamily: t.mono, formatter: '{c}%' },
+        }],
+      });
 
-      // Memory Top 10 - Horizontal Bar
-      const memTop10 = this._chart('memTop10');
-      memTop10.setOption({
-        tooltip: {
-          trigger: 'axis', axisPointer: { type: 'shadow' },
-          backgroundColor: isDark ? '#1e1e2e' : '#fff', borderColor: gridColor,
-          textStyle: { color: textColor, fontSize: 11 },
-          formatter: params => `<b>${memSorted[params[0].dataIndex].name}</b><br/>内存: ${params[0].value}%`
-        },
-        grid: { left: 10, right: 40, top: 10, bottom: 5, containLabel: true },
-        xAxis: {
-          type: 'value', max: 100,
-          axisLabel: { color: textColor, fontSize: 10, formatter: '{value}%' },
-          splitLine: { lineStyle: { color: gridColor, type: 'dashed' } }
-        },
-        yAxis: {
-          type: 'category', data: memNames, inverse: true,
-          axisLabel: { color: textColor, fontSize: 10 },
-          axisLine: { lineStyle: { color: gridColor } }
-        },
-        series: [{
-          type: 'bar', data: memData,
-          itemStyle: {
-            color: params => {
-              const val = params.value;
-              if (val > 80) return '#ef4444';
-              if (val > 60) return '#f59e0b';
-              return '#10b981';
-            },
-            borderRadius: [0, 4, 4, 0]
-          },
-          label: {
-            show: true, position: 'right', color: textColor,
-            fontSize: 10, formatter: '{c}%'
-          }
-        }]
-      }, true);
+      this._chart('cpuTop10').setOption(top10Option(cpuNames, cpuData, cpuSorted, 'CPU'), true);
+      this._chart('memTop10').setOption(top10Option(memNames, memData, memSorted, '内存'), true);
 
       // Resource Distribution Pie
       const resourcePie = this._chart('resourcePie');
       const cpuNodeCount = this.nodes.filter(n => !n.is_gpu).length;
       const gpuNodeCount = this.nodes.filter(n => n.is_gpu).length;
-      const highCpuCount = this.nodes.filter(n => n.cpu_percent > 80).length;
-      const highMemCount = this.nodes.filter(n => n.mem_percent > 80).length;
 
       resourcePie.setOption({
-        tooltip: {
-          trigger: 'item',
-          backgroundColor: isDark ? '#1e1e2e' : '#fff', borderColor: gridColor,
-          textStyle: { color: textColor, fontSize: 11 },
-          formatter: '{b}: {c} ({d}%)'
-        },
+        ...base,
+        tooltip: { ...base.tooltip, trigger: 'item', formatter: '{b}: {c} ({d}%)' },
         legend: {
           orient: 'vertical', right: 10, top: 'center',
-          textStyle: { color: textColor, fontSize: 10 }
+          textStyle: { color: t.text, fontSize: 10, opacity: 0.75 },
         },
         series: [
           {
             type: 'pie', radius: ['40%', '70%'], center: ['40%', '50%'],
             data: [
-              { value: cpuNodeCount, name: 'CPU 节点', itemStyle: { color: '#3b82f6' } },
-              { value: gpuNodeCount, name: 'GPU 节点', itemStyle: { color: '#8b5cf6' } }
+              { value: cpuNodeCount, name: 'CPU 节点', itemStyle: { color: t.info } },
+              { value: gpuNodeCount, name: 'GPU 节点', itemStyle: { color: t.accent } },
             ],
-            label: { color: textColor, fontSize: 10 },
-            emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0, 0, 0, 0.5)' } }
-          }
-        ]
+            label: { color: t.text, fontSize: 10 },
+            emphasis: { itemStyle: { shadowBlur: 8, shadowOffsetX: 0, shadowColor: 'rgba(0, 0, 0, 0.25)' } },
+          },
+        ],
       }, true);
 
       Object.values(this._charts).forEach(c => c && c.resize());
