@@ -610,15 +610,26 @@ function dashboard() {
       const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
       const textColor = isDark ? '#a1a1aa' : '#52525b';
       const gridColor = isDark ? '#27272a' : '#e4e4e7';
-      const names = this.nodes.map(n => n.name.length > 20 ? n.name.substring(0, 18) + '...' : n.name);
+      const names = this.nodes.map(n => n.name);
 
       const chart = this._chart('capacityBar');
       chart.setOption({
-        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: isDark ? '#1e1e2e' : '#fff', borderColor: gridColor, textStyle: { color: textColor, fontSize: 11 } },
+        tooltip: {
+          trigger: 'axis', axisPointer: { type: 'shadow' },
+          backgroundColor: isDark ? '#1e1e2e' : '#fff', borderColor: gridColor,
+          textStyle: { color: textColor, fontSize: 11 },
+          formatter: params => {
+            const n = this.nodes[params[0].dataIndex];
+            let s = `<b>${n.name}</b>`;
+            params.forEach(p => { s += `<br/>${p.marker}${p.seriesName}: ${p.value}`; });
+            return s;
+          },
+        },
         legend: { data: ['CPU (核)', '内存 (GB)'], textStyle: { color: textColor, fontSize: 11 }, top: 0 },
         grid: { left: 10, right: 30, top: 30, bottom: 5, containLabel: true },
         xAxis: { type: 'value', axisLabel: { color: textColor, fontSize: 11 }, splitLine: { lineStyle: { color: gridColor } } },
-        yAxis: { type: 'category', data: names, axisLabel: { color: textColor, fontSize: 11 }, inverse: true },
+        // 原生按可用宽度截断（悬停 tooltip 显示全名），不再手写字符数截断
+        yAxis: { type: 'category', data: names, axisLabel: { color: textColor, fontSize: 11, width: 118, overflow: 'truncate' }, inverse: true },
         series: [
           { name: 'CPU (核)', type: 'bar', data: this.nodes.map(n => n.cpu_capacity), itemStyle: { color: '#f59e0b', borderRadius: [0, 4, 4, 0] }, barGap: '10%' },
           { name: '内存 (GB)', type: 'bar', data: this.nodes.map(n => n.mem_capacity_gb), itemStyle: { color: '#10b981', borderRadius: [0, 4, 4, 0] } },
@@ -633,12 +644,12 @@ function dashboard() {
 
       // Sort nodes by CPU usage and get top 10
       const cpuSorted = [...this.nodes].sort((a, b) => b.cpu_percent - a.cpu_percent).slice(0, 10);
-      const cpuNames = cpuSorted.map(n => n.name.length > 15 ? n.name.substring(0, 13) + '..' : n.name);
+      const cpuNames = cpuSorted.map(n => n.name);
       const cpuData = cpuSorted.map(n => n.cpu_percent);
 
       // Sort nodes by Memory usage and get top 10
       const memSorted = [...this.nodes].sort((a, b) => b.mem_percent - a.mem_percent).slice(0, 10);
-      const memNames = memSorted.map(n => n.name.length > 15 ? n.name.substring(0, 13) + '..' : n.name);
+      const memNames = memSorted.map(n => n.name);
       const memData = memSorted.map(n => n.mem_percent);
 
       // CPU Top 10 - Horizontal Bar
@@ -658,7 +669,7 @@ function dashboard() {
         },
         yAxis: {
           type: 'category', data: cpuNames, inverse: true,
-          axisLabel: { color: textColor, fontSize: 10 },
+          axisLabel: { color: textColor, fontSize: 10, width: 108, overflow: 'truncate' },
           axisLine: { lineStyle: { color: gridColor } }
         },
         series: [{
@@ -696,7 +707,7 @@ function dashboard() {
         },
         yAxis: {
           type: 'category', data: memNames, inverse: true,
-          axisLabel: { color: textColor, fontSize: 10 },
+          axisLabel: { color: textColor, fontSize: 10, width: 108, overflow: 'truncate' },
           axisLine: { lineStyle: { color: gridColor } }
         },
         series: [{
