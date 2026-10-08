@@ -264,9 +264,9 @@ func patchNode(ctx context.Context, typed *kubernetes.Clientset, name string, pa
 func nodeCordon(ctx context.Context, typed *kubernetes.Clientset, name string) (string, error) {
 	err := patchNode(ctx, typed, name, []byte(`{"spec":{"unschedulable":true}}`))
 	if err != nil {
-		return "", fmt.Errorf("封锁失败：%v", err)
+		return "", fmt.Errorf("停止调度失败：%v", err)
 	}
-	return fmt.Sprintf("节点 %s 已封锁（停止调度）", name), nil
+	return fmt.Sprintf("节点 %s 已停止调度", name), nil
 }
 
 func nodeUncordon(ctx context.Context, typed *kubernetes.Clientset, name string) (string, error) {

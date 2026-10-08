@@ -79,7 +79,7 @@
       <template x-if="node.schedulable">
         <button class="btn btn-sm btn-outline hover:bg-warning hover:text-warning-content hover:border-warning gap-1.5 h-8 min-h-0 text-xs transition-all" data-vb-spark
           @click="cordonModal.showModal()">
-          <i class="fas fa-ban text-[10px]"></i> 封锁
+          <i class="fas fa-ban text-[10px]"></i> 停止调度
         </button>
       </template>
       <template x-if="!node.schedulable">
@@ -108,7 +108,7 @@
       <!-- 状态标签 -->
       <template x-if="!node.schedulable && !node.drained">
         <span class="badge badge-warning badge-outline ml-2 gap-1.5 text-[10px] px-2.5 py-1">
-          <i class="fas fa-ban text-[8px]"></i> 已封锁（停止调度）
+          <i class="fas fa-ban text-[8px]"></i> 已停止调度
         </span>
       </template>
       <template x-if="node.drained">
@@ -251,9 +251,16 @@
                 </td>
                 <td class="font-mono text-[10px] opacity-60" x-text="pod.ip"></td>
                 <td>
-                  <button class="btn btn-ghost btn-xs h-6 min-h-0 text-[10px] gap-1 hover:text-primary" @click="viewLogs(pod.namespace, pod.name)">
-                    <i class="fas fa-terminal"></i> 日志
-                  </button>
+                  <div class="flex items-center gap-1">
+                    <button class="btn btn-ghost btn-xs h-6 min-h-0 text-[10px] gap-1 hover:text-primary" @click="viewLogs(pod.namespace, pod.name)">
+                      <i class="fas fa-terminal"></i> 日志
+                    </button>
+                    {{/* 删除 Pod：配合「停止调度」做负载迁移——删除后重建的新 Pod
+                         会被调度到其他可用节点 */}}
+                    <button class="btn btn-ghost btn-xs h-6 min-h-0 text-[10px] gap-1 hover:text-error" @click="askDeletePod(pod.namespace, pod.name)">
+                      <i class="fas fa-trash-alt"></i> 删除
+                    </button>
+                  </div>
                 </td>
               </tr>
             </template>
@@ -298,24 +305,25 @@
           <i class="fas fa-ban text-lg text-warning"></i>
         </div>
         <div>
-          <h3 class="font-bold text-base text-warning">封锁节点</h3>
+          <h3 class="font-bold text-base text-warning">停止调度节点</h3>
           <p class="text-xs opacity-50 mt-0.5">将节点标记为不可调度</p>
         </div>
       </div>
       <div class="space-y-3">
         <div class="bg-warning/5 border border-warning/15 rounded-xl p-4 space-y-3">
-          <p class="text-sm leading-relaxed">确定要封锁节点 <code class="bg-base-200 px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{.Content.NodeName}}</code> 吗？</p>
+          <p class="text-sm leading-relaxed">确定要停止调度节点 <code class="bg-base-200 px-2 py-0.5 rounded-md text-xs font-mono font-semibold">{{.Content.NodeName}}</code> 吗？</p>
           <div class="text-xs leading-relaxed opacity-70 space-y-1.5">
-            <p><i class="fas fa-info-circle text-warning mr-1.5"></i>封锁后，调度器将不再向该节点分配新的 Pod。</p>
+            <p><i class="fas fa-exclamation-circle text-warning mr-1.5"></i>停止调度后，调度器将不再向该节点分配新的 Pod。</p>
             <p><i class="fas fa-check-circle text-success mr-1.5"></i>节点上已运行的 Pod 不受影响，会继续正常运行。</p>
+            <p><i class="fas fa-exchange-alt text-info mr-1.5"></i>如需迁移工作负载：停止调度后，在下方容器组列表中删除 Pod，它们会被自动调度到其他节点。</p>
             <p><i class="fas fa-undo text-info mr-1.5"></i>后续可通过「恢复调度」恢复节点调度。</p>
           </div>
         </div>
       </div>
       <div class="modal-action mt-6 gap-2.5">
         <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="cordonModal.close()">取消</button>
-        <button class="btn btn-warning btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" onclick="nodeAction('/clusters/{{.Content.Cluster.ID}}/node/{{.Content.NodeName}}/cordon/', '封锁'); cordonModal.close();">
-          <i class="fas fa-ban text-[10px]"></i> 确认封锁
+        <button class="btn btn-warning btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" onclick="nodeAction('/clusters/{{.Content.Cluster.ID}}/node/{{.Content.NodeName}}/cordon/', '停止调度'); cordonModal.close();">
+          <i class="fas fa-ban text-[10px]"></i> 确认停止调度
         </button>
       </div>
     </div>
@@ -375,6 +383,36 @@
         <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="drainModal.close()">取消</button>
         <button class="btn btn-warning btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" onclick="nodeAction('/clusters/{{.Content.Cluster.ID}}/node/{{.Content.NodeName}}/drain/', '排空'); drainModal.close();">
           <i class="fas fa-water text-[10px]"></i> 确认排空
+        </button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>close</button></form>
+  </dialog>
+
+  <!-- Delete Pod Confirmation Modal（节点详情内的容器组删除） -->
+  <dialog id="nodePodDeleteModal" class="modal">
+    <div class="modal-box max-w-md bg-base-100 border border-error/20 rounded-2xl shadow-2xl">
+      <div class="flex items-center gap-3 mb-5">
+        <div class="w-11 h-11 rounded-xl bg-error/10 flex items-center justify-center flex-shrink-0">
+          <i class="fas fa-trash-alt text-lg text-error"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-base text-error">删除 Pod</h3>
+          <p class="text-xs opacity-50 mt-0.5" x-text="podToDelete ? podToDelete.ns + ' / ' + podToDelete.name : ''"></p>
+        </div>
+      </div>
+      <div class="bg-error/5 border border-error/15 rounded-xl p-4 space-y-2">
+        <p class="text-sm leading-relaxed">确定要删除 Pod <code class="bg-base-200 text-error px-2 py-0.5 rounded-md text-xs font-mono font-semibold" x-text="podToDelete ? podToDelete.name : ''"></code> 吗？</p>
+        <div class="text-xs leading-relaxed opacity-70 space-y-1.5">
+          <p><i class="fas fa-info-circle text-error mr-1.5"></i>由 Deployment / StatefulSet 等控制器管理的 Pod 删除后会自动重建。</p>
+          <p><i class="fas fa-exchange-alt text-info mr-1.5"></i>若该节点已停止调度，重建的新 Pod 会被调度到其他可用节点——这是迁移负载的标准做法。</p>
+          <p><i class="fas fa-exclamation-triangle text-warning mr-1.5"></i>裸 Pod（无控制器）删除后不会重建。</p>
+        </div>
+      </div>
+      <div class="modal-action mt-6 gap-2.5">
+        <button type="button" class="btn btn-ghost btn-sm h-9 min-h-0 px-5 rounded-lg text-xs font-medium" onclick="nodePodDeleteModal.close()">取消</button>
+        <button class="btn btn-error btn-sm gap-2 h-9 min-h-0 px-5 rounded-lg text-xs font-medium shadow-lg transition-all hover:scale-105" @click="deletePod()">
+          <i class="fas fa-trash-alt text-[10px]"></i> 确认删除
         </button>
       </div>
     </div>
@@ -560,6 +598,31 @@ function nodeDetail() {
           this.loading = false;
         });
     },
+    podToDelete: null,
+    askDeletePod(ns, name) {
+      this.podToDelete = {ns, name};
+      document.getElementById('nodePodDeleteModal').showModal();
+    },
+    deletePod() {
+      if (!this.podToDelete) return;
+      const p = this.podToDelete;
+      fetch(`/resources/{{.Content.Cluster.ID}}/delete/pod/${p.ns}/${p.name}/`, {
+        method: 'POST',
+        headers: {'X-Requested-With': 'XMLHttpRequest'},
+      })
+        .then(r => r.json())
+        .then(d => {
+          document.getElementById('nodePodDeleteModal').close();
+          if (d.success) {
+            showToast(`Pod ${p.name} 删除指令已发出`);
+            setTimeout(() => this.load(), 800);
+          } else {
+            showToast(d.error || '删除失败', 'error');
+          }
+        })
+        .catch(e => showToast('请求失败: ' + e.message, 'error'));
+    },
+
     viewLogs(namespace, podName, isAutoRefresh = false, skipReset = false) {
       this.logPodName = podName;
       this.logNamespace = namespace;
