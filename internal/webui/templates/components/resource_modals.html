@@ -12,7 +12,7 @@
           <i class="fas fa-file-code text-base text-primary"></i>
         </div>
         <div>
-          <h3 class="font-bold text-base" id="yamlModalTitle">YAML 编辑器</h3>
+          <h3 class="font-bold text-lg" id="yamlModalTitle">YAML 编辑器</h3>
           <p class="text-[11px] mt-0.5 opacity-50" id="yamlModalPath">资源配置</p>
         </div>
       </div>
@@ -94,7 +94,7 @@
         <i class="fas fa-exclamation-triangle text-lg text-error"></i>
       </div>
       <div>
-        <h3 class="font-bold text-base text-error">确认删除</h3>
+        <h3 class="font-bold text-lg text-error">确认删除</h3>
         <p class="text-xs opacity-50 mt-0.5">此操作不可撤销，请谨慎操作</p>
       </div>
     </div>
@@ -195,7 +195,7 @@
         <i class="fas fa-expand-arrows-alt text-lg text-primary"></i>
       </div>
       <div>
-        <h3 class="font-bold text-base">扩缩容</h3>
+        <h3 class="font-bold text-lg">扩缩容</h3>
         <p class="text-xs opacity-50 mt-0.5">调整 <span id="scaleResourceName" class="font-semibold text-primary"></span> 的副本数</p>
       </div>
     </div>
@@ -265,7 +265,7 @@
         <i class="fas fa-redo text-lg text-warning"></i>
       </div>
       <div>
-        <h3 class="font-bold text-base text-warning">确认重启</h3>
+        <h3 class="font-bold text-lg text-warning">确认重启</h3>
         <p class="text-xs opacity-50 mt-0.5">将触发滚动更新以重启所有 Pod</p>
       </div>
     </div>
@@ -316,7 +316,7 @@
           <i class="fas text-base text-primary" :class="resourceType === 'deployment' ? 'fa-rocket' : resourceType === 'statefulset' ? 'fa-database' : resourceType === 'service' ? 'fa-network-wired' : 'fa-clone'"></i>
         </div>
         <div>
-          <h3 class="font-bold text-base" x-text="(resourceType === 'deployment' ? 'Deployment' : resourceType === 'statefulset' ? 'StatefulSet' : resourceType === 'service' ? 'Service' : 'DaemonSet') + ' 详情'"></h3>
+          <h3 class="font-bold text-lg" x-text="(resourceType === 'deployment' ? 'Deployment' : resourceType === 'statefulset' ? 'StatefulSet' : resourceType === 'service' ? 'Service' : 'DaemonSet') + ' 详情'"></h3>
           <div class="flex items-center gap-2 text-xs opacity-50 mt-0.5">
             <span class="font-mono" x-text="meta.namespace"></span>
             <span>/</span>
@@ -390,8 +390,8 @@
 
         <!-- 滚动更新进行中（蓝色） -->
         <template x-if="isRolling">
-          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #e0f2fe; border-color: #7dd3fc; color: #0c4a6e;">
-            <i class="fas fa-sync-alt animate-spin mt-0.5" style="color: #0284c7;"></i>
+          <div class="flex items-start gap-3 rounded-xl border border-info/30 bg-info/10 p-4">
+            <i class="fas fa-sync-alt animate-spin mt-0.5 text-info"></i>
             <div class="text-xs leading-relaxed">
               <span class="font-semibold text-sm block mb-1">滚动更新进行中</span>
               <template x-if="resourceType === 'daemonset'">
@@ -409,8 +409,8 @@
 
         <!-- Pod 启动异常（红色）：有 Pod 处于异常状态 -->
         <template x-if="podBlockReasons.length > 0">
-          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #fef2f2; border-color: #fca5a5; color: #7f1d1d;">
-            <i class="fas fa-exclamation-triangle mt-0.5" style="color: #dc2626;"></i>
+          <div class="flex items-start gap-3 rounded-xl border border-error/30 bg-error/10 p-4">
+            <i class="fas fa-exclamation-triangle mt-0.5 text-error"></i>
             <div class="text-xs leading-relaxed">
               <span class="font-semibold text-sm block mb-1">Pod 异常</span>
               存在异常状态的 Pod：<span class="font-semibold" x-text="podBlockReasons.join('、')"></span><br>
@@ -421,8 +421,8 @@
 
         <!-- 扩容/启动中（黄色）：就绪数 < 期望数，但没有异常 Pod -->
         <template x-if="isScaling && podBlockReasons.length === 0">
-          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #fef9c3; border-color: #fcd34d; color: #78350f;">
-            <i class="fas fa-spinner fa-spin mt-0.5" style="color: #d97706;"></i>
+          <div class="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4">
+            <i class="fas fa-spinner fa-spin mt-0.5 text-warning"></i>
             <div class="text-xs leading-relaxed">
               <span class="font-semibold text-sm block mb-1">副本启动中</span>
               <template x-if="resourceType !== 'daemonset'">
@@ -437,8 +437,8 @@
 
         <!-- Pod 数量超出期望（黄色）：缩容后旧 Pod 未删除 -->
         <template x-if="!isRolling && !isScaling && podBlockReasons.length === 0 && (resourceType === 'deployment' || resourceType === 'statefulset') && pods.length > (info.replicas || 0) && (info.replicas || 0) > 0">
-          <div class="flex items-start gap-3 rounded-xl border p-4" style="background-color: #fef9c3; border-color: #fcd34d; color: #78350f;">
-            <i class="fas fa-info-circle mt-0.5" style="color: #d97706;"></i>
+          <div class="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4">
+            <i class="fas fa-info-circle mt-0.5 text-warning"></i>
             <div class="text-xs leading-relaxed">
               <span class="font-semibold text-sm block mb-1">为什么显示 <span x-text="pods.length"></span> 个 Pod，但期望副本数是 <span x-text="info.replicas"></span>？</span>
               滚动更新时旧 Pod 需等新 Pod 就绪后才会被删除。当新 Pod 因镜像错误等原因一直无法就绪时，旧 Pod 会持续保留。<br>
@@ -450,22 +450,22 @@
         <!-- 副本状态卡片 - Deployment -->
         <template x-if="resourceType === 'deployment'">
           <div class="grid grid-cols-4 gap-3">
-            <div class="bg-base-200 rounded-xl p-4 text-center">
+            <div class="rounded-xl border border-base-300/60 bg-base-200/40 p-4 text-center">
               <i class="fas fa-crosshairs text-primary mb-1"></i>
               <div class="text-2xl font-bold text-primary" x-text="info.replicas ?? 0"></div>
               <div class="text-xs opacity-50 mt-1">期望副本</div>
             </div>
-            <div class="bg-base-200 rounded-xl p-4 text-center">
+            <div class="rounded-xl border border-base-300/60 bg-base-200/40 p-4 text-center">
               <i class="fas fa-check-circle text-success mb-1"></i>
               <div class="text-2xl font-bold text-success" x-text="info.ready_replicas ?? 0"></div>
               <div class="text-xs opacity-50 mt-1">就绪</div>
             </div>
-            <div class="bg-base-200 rounded-xl p-4 text-center">
+            <div class="rounded-xl border border-base-300/60 bg-base-200/40 p-4 text-center">
               <i class="fas fa-arrow-up text-info mb-1"></i>
               <div class="text-2xl font-bold text-info" x-text="info.updated_replicas ?? 0"></div>
               <div class="text-xs opacity-50 mt-1">已更新</div>
             </div>
-            <div class="bg-base-200 rounded-xl p-4 text-center">
+            <div class="rounded-xl border border-base-300/60 bg-base-200/40 p-4 text-center">
               <i class="fas fa-times-circle text-error mb-1"></i>
               <div class="text-2xl font-bold text-error" x-text="info.unavailable_replicas ?? 0"></div>
               <div class="text-xs opacity-50 mt-1">不可用</div>
@@ -476,22 +476,22 @@
         <!-- 副本状态卡片 - StatefulSet -->
         <template x-if="resourceType === 'statefulset'">
           <div class="grid grid-cols-4 gap-3">
-            <div class="bg-base-200 rounded-xl p-4 text-center">
+            <div class="rounded-xl border border-base-300/60 bg-base-200/40 p-4 text-center">
               <i class="fas fa-crosshairs text-primary mb-1"></i>
               <div class="text-2xl font-bold text-primary" x-text="info.replicas ?? 0"></div>
               <div class="text-xs opacity-50 mt-1">期望副本</div>
             </div>
-            <div class="bg-base-200 rounded-xl p-4 text-center">
+            <div class="rounded-xl border border-base-300/60 bg-base-200/40 p-4 text-center">
               <i class="fas fa-check-circle text-success mb-1"></i>
               <div class="text-2xl font-bold text-success" x-text="info.ready_replicas ?? 0"></div>
               <div class="text-xs opacity-50 mt-1">就绪</div>
             </div>
-            <div class="bg-base-200 rounded-xl p-4 text-center">
+            <div class="rounded-xl border border-base-300/60 bg-base-200/40 p-4 text-center">
               <i class="fas fa-arrow-up text-info mb-1"></i>
               <div class="text-2xl font-bold text-info" x-text="info.updated_replicas ?? 0"></div>
               <div class="text-xs opacity-50 mt-1">已更新</div>
             </div>
-            <div class="bg-base-200 rounded-xl p-4 text-center">
+            <div class="rounded-xl border border-base-300/60 bg-base-200/40 p-4 text-center">
               <i class="fas fa-server text-accent mb-1"></i>
               <div class="text-2xl font-bold text-accent" x-text="info.current_replicas ?? 0"></div>
               <div class="text-xs opacity-50 mt-1">当前</div>
@@ -502,22 +502,22 @@
         <!-- 副本状态卡片 - DaemonSet -->
         <template x-if="resourceType === 'daemonset'">
           <div class="grid grid-cols-4 gap-3">
-            <div class="bg-base-200 rounded-xl p-4 text-center">
+            <div class="rounded-xl border border-base-300/60 bg-base-200/40 p-4 text-center">
               <i class="fas fa-crosshairs text-primary mb-1"></i>
               <div class="text-2xl font-bold text-primary" x-text="info.desired ?? 0"></div>
               <div class="text-xs opacity-50 mt-1">期望节点数</div>
             </div>
-            <div class="bg-base-200 rounded-xl p-4 text-center">
+            <div class="rounded-xl border border-base-300/60 bg-base-200/40 p-4 text-center">
               <i class="fas fa-check-circle text-success mb-1"></i>
               <div class="text-2xl font-bold text-success" x-text="info.ready ?? 0"></div>
               <div class="text-xs opacity-50 mt-1">就绪</div>
             </div>
-            <div class="bg-base-200 rounded-xl p-4 text-center">
+            <div class="rounded-xl border border-base-300/60 bg-base-200/40 p-4 text-center">
               <i class="fas fa-arrow-up text-info mb-1"></i>
               <div class="text-2xl font-bold text-info" x-text="info.updated ?? 0"></div>
               <div class="text-xs opacity-50 mt-1">已更新</div>
             </div>
-            <div class="bg-base-200 rounded-xl p-4 text-center">
+            <div class="rounded-xl border border-base-300/60 bg-base-200/40 p-4 text-center">
               <i class="fas fa-check-double text-secondary mb-1"></i>
               <div class="text-2xl font-bold text-secondary" x-text="info.available ?? 0"></div>
               <div class="text-xs opacity-50 mt-1">可用</div>
@@ -527,9 +527,9 @@
 
         <!-- 基本信息 - Deployment -->
         <template x-if="resourceType === 'deployment'">
-          <div class="card bg-base-200 shadow">
-            <div class="card-body p-5 gap-4">
-              <h4 class="card-title text-sm">
+          <div class="rounded-xl border border-base-300/60 bg-base-200/40">
+            <div class="flex flex-col gap-4 p-5">
+              <h4 class="flex items-center gap-2 text-sm font-bold">
                 <i class="fas fa-info-circle text-xs text-primary"></i> 基本信息
               </h4>
               <div class="grid grid-cols-2 gap-y-3 gap-x-6">
@@ -553,9 +553,9 @@
 
         <!-- 基本信息 - StatefulSet -->
         <template x-if="resourceType === 'statefulset'">
-          <div class="card bg-base-200 shadow">
-            <div class="card-body p-5 gap-4">
-              <h4 class="card-title text-sm">
+          <div class="rounded-xl border border-base-300/60 bg-base-200/40">
+            <div class="flex flex-col gap-4 p-5">
+              <h4 class="flex items-center gap-2 text-sm font-bold">
                 <i class="fas fa-info-circle text-xs text-primary"></i> 基本信息
               </h4>
               <div class="grid grid-cols-2 gap-y-3 gap-x-6">
@@ -581,9 +581,9 @@
 
         <!-- 基本信息 - DaemonSet -->
         <template x-if="resourceType === 'daemonset'">
-          <div class="card bg-base-200 shadow">
-            <div class="card-body p-5 gap-4">
-              <h4 class="card-title text-sm">
+          <div class="rounded-xl border border-base-300/60 bg-base-200/40">
+            <div class="flex flex-col gap-4 p-5">
+              <h4 class="flex items-center gap-2 text-sm font-bold">
                 <i class="fas fa-info-circle text-xs text-primary"></i> 基本信息
               </h4>
               <div class="grid grid-cols-2 gap-y-3 gap-x-6">
@@ -607,9 +607,9 @@
 
         <!-- 基本信息 - Service -->
         <template x-if="resourceType === 'service'">
-          <div class="card bg-base-200 shadow">
-            <div class="card-body p-5 gap-4">
-              <h4 class="card-title text-sm">
+          <div class="rounded-xl border border-base-300/60 bg-base-200/40">
+            <div class="flex flex-col gap-4 p-5">
+              <h4 class="flex items-center gap-2 text-sm font-bold">
                 <i class="fas fa-info-circle text-xs text-primary"></i> 基本信息
               </h4>
               <div class="grid grid-cols-2 gap-y-3 gap-x-6">
@@ -639,9 +639,9 @@
 
         <!-- 端口映射 - Service -->
         <template x-if="resourceType === 'service'">
-          <div class="card bg-base-200 shadow">
-            <div class="card-body p-5 gap-4">
-              <h4 class="card-title text-sm">
+          <div class="rounded-xl border border-base-300/60 bg-base-200/40">
+            <div class="flex flex-col gap-4 p-5">
+              <h4 class="flex items-center gap-2 text-sm font-bold">
                 <i class="fas fa-exchange-alt text-xs text-info"></i> 端口映射
               </h4>
               <div class="overflow-x-auto">
@@ -671,9 +671,9 @@
         </template>
 
         <!-- 容器 (仅工作负载，Service 不显示) -->
-        <div class="card bg-base-200 shadow" x-show="resourceType !== 'service'">
-          <div class="card-body p-5 gap-4">
-            <h4 class="card-title text-sm">
+        <div class="rounded-xl border border-base-300/60 bg-base-200/40" x-show="resourceType !== 'service'">
+          <div class="flex flex-col gap-4 p-5">
+            <h4 class="flex items-center gap-2 text-sm font-bold">
               <i class="fas fa-cube text-xs text-info"></i> 容器
             </h4>
             <div class="space-y-2">
@@ -699,9 +699,9 @@
         </div>
 
         <!-- Conditions (仅工作负载) -->
-        <div class="card bg-base-200 shadow" x-show="resourceType !== 'service'">
-          <div class="card-body p-5 gap-4">
-            <h4 class="card-title text-sm">
+        <div class="rounded-xl border border-base-300/60 bg-base-200/40" x-show="resourceType !== 'service'">
+          <div class="flex flex-col gap-4 p-5">
+            <h4 class="flex items-center gap-2 text-sm font-bold">
               <i class="fas fa-heartbeat text-xs text-success"></i> Conditions
             </h4>
             <div class="overflow-x-auto">
@@ -741,9 +741,9 @@
 
       <!-- Tab: Endpoints (Service only) -->
       <div x-show="!loading && !error && tab === 'endpoints'" x-cloak>
-        <div class="card bg-base-200 shadow">
-          <div class="card-body p-5 gap-4">
-            <h4 class="card-title text-sm">
+        <div class="rounded-xl border border-base-300/60 bg-base-200/40">
+          <div class="flex flex-col gap-4 p-5">
+            <h4 class="flex items-center gap-2 text-sm font-bold">
               <i class="fas fa-plug text-xs text-success"></i> Endpoints
               <span class="badge badge-sm" x-text="endpoints.length"></span>
             </h4>
@@ -780,8 +780,8 @@
 
       <!-- Tab: Events -->
       <div x-show="!loading && !error && tab === 'events'" x-cloak>
-        <div class="card bg-base-200 shadow">
-          <div class="card-body p-5 gap-4">
+        <div class="rounded-xl border border-base-300/60 bg-base-200/40">
+          <div class="flex flex-col gap-4 p-5">
             <div class="overflow-x-auto">
               <table class="table table-sm">
                 <thead>
@@ -829,8 +829,8 @@
 
       <!-- Tab: 关联 Pods -->
       <div x-show="!loading && !error && tab === 'pods'" x-cloak>
-        <div class="card bg-base-200 shadow">
-          <div class="card-body p-5 gap-4">
+        <div class="rounded-xl border border-base-300/60 bg-base-200/40">
+          <div class="flex flex-col gap-4 p-5">
             <div class="overflow-x-auto">
               <table class="table table-sm">
                 <thead>
@@ -922,7 +922,7 @@
       </div>
     </div>
 
-    <div class="alert text-[11px] mb-3" style="background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.3);">
+    <div class="alert text-[11px] mb-3 border border-warning/30 bg-warning/10">
       <i class="fas fa-info-circle text-warning"></i>
       <span>选择一个历史版本回滚。回滚会用该历史版本的 pod template 覆盖当前配置，触发滚动更新。</span>
     </div>
@@ -968,8 +968,7 @@
     </div>
 
     <!-- 内联确认条：点击"回滚到此"后展开 -->
-    <div x-show="pendingRevision" x-cloak class="mt-4 rounded-lg p-3 flex items-center justify-between gap-3"
-         style="background: rgba(234,179,8,0.08); border: 1px solid rgba(234,179,8,0.35);">
+    <div x-show="pendingRevision" x-cloak class="mt-4 rounded-lg p-3 flex items-center justify-between gap-3 border border-warning/35 bg-warning/10">
       <div class="flex items-center gap-2 text-xs">
         <i class="fas fa-exclamation-triangle text-warning"></i>
         <span>确认回滚到 <span class="font-bold" x-text="'revision #' + pendingRevision"></span> ？此操作会立即触发滚动更新。</span>
@@ -1002,7 +1001,7 @@
           <i class="fas fa-terminal text-sm text-primary"></i>
         </div>
         <div>
-          <span class="font-semibold text-base text-base-content">Pod 日志</span>
+          <span class="font-semibold text-lg text-base-content">Pod 日志</span>
           <div class="text-xs mt-0.5 opacity-60" x-text="namespace + ' / ' + podName"></div>
         </div>
       </div>
@@ -1080,7 +1079,7 @@ Pod 终端（exec）。故意不放 .modal-backdrop：终端里随手点一下�
           <i class="fas fa-terminal text-sm text-success"></i>
         </div>
         <div>
-          <span class="font-semibold text-base text-base-content">容器终端</span>
+          <span class="font-semibold text-lg text-base-content">容器终端</span>
           <div class="text-xs mt-0.5 opacity-60">
             <span x-text="namespace + ' / ' + podName"></span>
             <span x-show="container" class="ml-1.5 px-1.5 py-0.5 rounded bg-success/15 text-success"
@@ -1135,7 +1134,7 @@ Pod 终端（exec）。故意不放 .modal-backdrop：终端里随手点一下�
           <i class="fas fa-bug text-sm text-warning"></i>
         </div>
         <div>
-          <span class="font-semibold text-base text-base-content">注入调试容器</span>
+          <span class="font-semibold text-lg text-base-content">注入调试容器</span>
           <div class="text-xs mt-0.5 opacity-60" x-text="namespace + ' / ' + podName"></div>
         </div>
       </div>
