@@ -215,24 +215,24 @@
     <!-- Charts Row -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
       <!-- CPU Top 10 -->
-      <div class="fx-card fx-card-glow chart-card" data-vb-reveal>
+      <div class="chart-card" data-vb-reveal>
         <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">CPU 使用率 Top 10</h3>
         <div id="cpuTop10" style="width: 100%; height: 340px;"></div>
       </div>
       <!-- Memory Top 10 -->
-      <div class="fx-card fx-card-glow chart-card" data-vb-reveal>
+      <div class="chart-card" data-vb-reveal>
         <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">内存使用率 Top 10</h3>
         <div id="memTop10" style="width: 100%; height: 340px;"></div>
       </div>
       <!-- Resource Distribution -->
-      <div class="fx-card fx-card-glow chart-card" data-vb-reveal>
+      <div class="chart-card" data-vb-reveal>
         <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">资源分布</h3>
         <div id="resourcePie" style="width: 100%; height: 340px;"></div>
       </div>
     </div>
 
     <!-- Node Detail Table - Card Grid -->
-    <div class="fx-card fx-card-glow chart-card">
+    <div class="chart-card">
       <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">节点资源明细</h3>
       <div class="flex items-center gap-2 mb-3">
         <input type="text" x-model="nodeSearch" placeholder="搜索节点..." class="input input-bordered input-sm h-8 min-h-0 w-48 text-xs focus:input-primary">
@@ -401,13 +401,13 @@
     </div>
 
     <!-- Capacity Chart -->
-    <div class="fx-card fx-card-glow chart-card mb-5" data-vb-reveal>
+    <div class="chart-card mb-5" data-vb-reveal>
       <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">各节点资源容量</h3>
       <div id="capacityBar" style="width: 100%; height: 320px;"></div>
     </div>
 
     <!-- Node Detail Cards (capacity only) -->
-    <div class="fx-card fx-card-glow chart-card">
+    <div class="chart-card">
       <h3 class="text-xs font-semibold opacity-40 uppercase tracking-wider mb-3">节点资源明细</h3>
       <div class="flex items-center gap-2 mb-3">
         <input type="text" x-model="nodeSearch" placeholder="搜索节点..." class="input input-bordered input-sm h-8 min-h-0 w-48 text-xs focus:input-primary">
@@ -640,6 +640,10 @@ function dashboard() {
           borderColor: t.grid,
           padding: [8, 12],
           textStyle: { color: t.text, fontSize: 11 },
+          // transitionDuration 默认 0.4s：tooltip 跟随光标时全程跑 CSS
+          // 过渡，WKWebView 下是持续重绘源；置 0 + confine，位置直接落定
+          transitionDuration: 0,
+          confine: true,
           extraCssText: 'border-radius: 8px; box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);',
         },
       };
