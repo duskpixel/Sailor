@@ -90,7 +90,7 @@
       { "name": "chrome", "value": "0.2s ease", "purpose": "侧栏折叠、顶栏位移等导航 chrome。" },
       { "name": "state", "value": "0.15s ease", "purpose": "按钮 / 卡片状态过渡与表格行高亮（0.1s）。" },
       { "name": "spring-lift", "value": "0.24s var(--ease-spring) translateY(-2px)", "purpose": "fx-card 悬停抬升；上限，不得更夸张。" },
-      { "name": "page-in", "value": "0.3s ease-out fadeIn", "purpose": "整页内容进场（服务端渲染整页跳转的衔接）。" }
+      { "name": "page-in", "value": "0.18s cubic-bezier(0.16,1,0.3,1) fadeIn（0.6 透明度起步的快速落定）", "purpose": "整页内容进场（服务端渲染整页跳转的衔接）；从已可见状态出发，禁止全透明起步。" }
     ],
     "breakpoints": [
       { "name": "desktop-min", "value": "1080px", "note": "窗口最小宽度，无移动端断点（桌面应用）" }

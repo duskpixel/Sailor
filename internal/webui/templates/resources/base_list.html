@@ -128,8 +128,8 @@
           </tr>
         </thead>
         <tbody>
-          <!-- 骨架屏 -->
-          <template x-if="loading">
+          <!-- 骨架屏（延迟 160ms：快加载不闪骨架） -->
+          <template x-if="loading && showSkeleton">
             <template x-for="i in 6" :key="i">
               <tr class="animate-pulse border-b border-base-300/50">
                 {{block "skeleton_cols" .}}
@@ -248,6 +248,8 @@ function resourceList() {
     optionalInstalled: null, // 可选 CRD（KEDA）安装状态：null=未知 true/false=已/未安装
     rows: [],
     namespaces: [],
+    showSkeleton: false,   // 骨架屏延迟出场（160ms 内返回的快加载不闪骨架）
+    _skTimer: null,
     nsFilter: initialParams.get('namespace') || storedNS,
     nsOpen: false,           // ns combobox 下拉 panel 是否展开
     nsSearch: '',            // ns combobox 输入框内容（contains 匹配，比原生 select 强）
@@ -458,7 +460,14 @@ function resourceList() {
         // 点亮页头（面包屑栏最右侧）的全局刷新指示
         if (window.Alpine) Alpine.store('ui').refreshing = true;
       }
-      else this.loading = true;
+      else {
+        this.loading = true;
+        // 延迟骨架屏：本地缓存常在几十毫秒内返回，立即渲染骨架行会闪一下
+        // 就被数据换掉。加载超过 160ms 才认为"真的在等"，骨架屏才出场。
+        clearTimeout(this._skTimer);
+        this.showSkeleton = false;
+        this._skTimer = setTimeout(() => { this.showSkeleton = true; }, 160);
+      }
       this.error = null;
       this.serviceDown = false;
       // 取消上一次未完成的请求，防止旧请求的响应覆盖新筛选条件的结果
@@ -511,6 +520,8 @@ function resourceList() {
           this.error = null;
         })
         .finally(() => {
+          clearTimeout(this._skTimer);
+          this.showSkeleton = false;
           this.loading = false;
           this.refreshing = false;
           if (window.Alpine) Alpine.store('ui').refreshing = false;

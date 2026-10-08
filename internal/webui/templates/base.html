@@ -102,10 +102,12 @@
 
     /* Page transition */
     @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(4px); }
+      from { opacity: 0.6; transform: translateY(3px); }
       to { opacity: 1; transform: translateY(0); }
     }
-    .page-content { animation: fadeIn 0.2s ease-out; }
+    /* 从"已可见"的 0.6 起步快速落定（180ms 急停缓出）：全透明起步在本地
+       毫秒级加载下读起来像闪一下，而不是进场动效 */
+    .page-content { animation: fadeIn 0.18s cubic-bezier(0.16, 1, 0.3, 1); }
 
     /* Status pulse */
     @keyframes pulse-dot {
