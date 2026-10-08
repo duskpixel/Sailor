@@ -332,8 +332,12 @@ func (s *Session) complete(line string) (string, []string) {
 		}
 		pos = append(pos, f)
 	}
+	// 剥掉 kubectl 前缀（允许带前缀敲，补全语义与执行语义一致）
+	if len(pos) > 0 && pos[0] == "kubectl" {
+		pos = pos[1:]
+	}
 	if len(pos) == 0 {
-		words := append([]string{}, builtinWords...)
+		words := append([]string{"kubectl"}, builtinWords...)
 		words = append(words, kubectlVerbs...)
 		return pickWords(words, word)
 	}
@@ -446,6 +450,9 @@ const helpText = `内建命令：
   help                   本帮助
 其余交给 kubectl（前缀可省略）：get pods -A、describe deploy/nginx -n default、
   logs -f xxx、apply -f -（粘贴 YAML 后 Ctrl+D 结束输入）、exec -it xxx -- sh …
+
+行编辑：Tab 补全（动词 / 类型 / 资源名 / -n 命名空间）· ↑/↓ 历史 ·
+  ←/→ 移动光标 · Home/End 跳行首行尾 · Ctrl+A/E 同 Home/End · Ctrl+U 清行
 
 注意：Ctrl+C 由 Sailor 拦截用于中断当前命令，不会传给远程容器 —— 退出
 交互式 exec 请输入 exit。`

@@ -169,13 +169,13 @@ func TestLinerBackspace(t *testing.T) {
 	if rec.lines[0] != "abz" {
 		t.Errorf("退格后提交 %q, want \"abz\"", rec.lines[0])
 	}
-	// CJK 双宽退格：擦两格
+	// CJK 双宽退格：左移两列 + 两个空格擦除 + 左移两列归位
 	out.Reset()
 	feedString(l, "中\x7f\r")
 	if rec.lines[1] != "" {
 		t.Errorf("中文退格后提交 %q, want \"\"", rec.lines[1])
 	}
-	if !strings.Contains(out.String(), "\b\b  \b\b") {
+	if !strings.Contains(out.String(), "\x1b[2D  \x1b[2D") {
 		t.Errorf("宽字符退格序列异常: %q", out.String())
 	}
 }
@@ -383,5 +383,73 @@ func TestCompleteNoCandidates(t *testing.T) {
 	ins, opts := s.complete("zzz")
 	if ins != "" || opts != nil {
 		t.Errorf("无候选应返回空, got (%q,%v)", ins, opts)
+	}
+}
+
+func TestLinerCursorEdit(t *testing.T) {
+	var out bytes.Buffer
+	rec := &recordingSubmit{}
+	l := newLiner("$ ", &out, rec.submit, nil)
+
+	// 行中插入：abc ← X → 提交 = abXc
+	feedString(l, "abc\x1b[DX\r")
+	if rec.lines[0] != "abXc" {
+		t.Errorf("行中插入得 %q, want \"abXc\"", rec.lines[0])
+	}
+	// 行中退格：abc ←← 后光标在 b 前，退格删 a → "bc"（要删 b 得用 Delete）
+	feedString(l, "abc\x1b[D\x1b[D\x7f\r")
+	if rec.lines[1] != "bc" {
+		t.Errorf("行中退格得 %q, want \"bc\"", rec.lines[1])
+	}
+	// Delete 删光标处字符：abcde Home →→ Delete 提交 = abde
+	feedString(l, "abcde\x1b[H\x1b[C\x1b[C\x1b[3~\r")
+	if rec.lines[2] != "abde" {
+		t.Errorf("Delete 得 %q, want \"abde\"", rec.lines[2])
+	}
+	// Home 后插入 = 行首插入；Ctrl+A/Ctrl+E 等价 Home/End
+	feedString(l, "bcd\x01a\r")
+	if rec.lines[3] != "abcd" {
+		t.Errorf("Ctrl+A 行首插入得 %q, want \"abcd\"", rec.lines[3])
+	}
+	feedString(l, "ab\x05!\r")
+	if rec.lines[4] != "ab!" {
+		t.Errorf("Ctrl+E 行尾插入得 %q, want \"ab!\"", rec.lines[4])
+	}
+	// 中文行中编辑：中文字 ← 退格 提交 = 文
+	feedString(l, "中文\x1b[D\x7f\r")
+	if rec.lines[5] != "文" {
+		t.Errorf("中文行中退格得 %q, want \"文\"", rec.lines[5])
+	}
+	// 光标在行中时 Tab 只响铃不补全
+	out.Reset()
+	l2 := newLiner("$ ", &out, rec.submit, nil)
+	l2.onTab = func(line string) (string, []string) { return "XXX", nil }
+	feedString(l2, "ab\x1b[D\t")
+	if !strings.Contains(out.String(), "\a") || l2.buf == nil || string(l2.buf) != "ab" {
+		t.Errorf("行中 Tab 应响铃不补全, buf=%q out=%q", l2.buf, out.String())
+	}
+}
+
+func TestCompleteKubectlPrefix(t *testing.T) {
+	s := newTestSession()
+	// 首词补全 kubectl 本身
+	ins, _ := s.complete("kubec")
+	if ins != "tl " {
+		t.Errorf("complete(kubec) = %q, want \"tl \"", ins)
+	}
+	// kubectl 前缀后继续补动词
+	ins, _ = s.complete("kubectl ge")
+	if ins != "t " {
+		t.Errorf("complete(kubectl ge) = %q, want \"t \"", ins)
+	}
+	// kubectl get 后补类型
+	ins, _ = s.complete("kubectl get de")
+	if ins != "ploy" {
+		t.Errorf("complete(kubectl get de) = %q, want \"ploy\"", ins)
+	}
+	// kubectl get deploy 后补名字
+	ins, _ = s.complete("kubectl get deploy api")
+	if ins != "-gateway" {
+		t.Errorf("complete(kubectl get deploy api) = %q", ins)
 	}
 }

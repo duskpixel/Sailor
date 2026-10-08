@@ -349,7 +349,7 @@ func (s *Session) attach(conn *websocket.Conn) {
 	s.booted = true
 	fmt.Fprintf(s.out, "\x1b[1;36mSailor 内置 kubectl\x1b[0m（库 %s）\r\n", kubectlLibVersion)
 	fmt.Fprintf(s.out, "集群：%s\r\n", s.Cluster)
-	fmt.Fprintf(s.out, "直接输入子命令（kubectl 前缀可省略）· Tab 补全 · ↑/↓ 历史 · Ctrl+C 中断 · exit 退出\r\n")
+	fmt.Fprintf(s.out, "直接输入子命令（kubectl 前缀可省略）· Tab 补全 · ↑/↓ 历史 · ←/→ 光标 · Ctrl+C 中断 · exit 退出\r\n")
 	fmt.Fprintf(s.out, "edit 转应用内 YAML 编辑器 · 不支持：diff / port-forward / proxy / plugin（依赖外部进程）\r\n")
 	s.liner.showPrompt()
 }
