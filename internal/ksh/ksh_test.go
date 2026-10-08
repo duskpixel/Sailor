@@ -304,7 +304,9 @@ func TestCompleteKinds(t *testing.T) {
 	}
 	found := false
 	for _, o := range opts {
-		if o == "deployment" { found = true }
+		if o == "deployment" {
+			found = true
+		}
 	}
 	if !found {
 		t.Errorf("类型候选应含 deployment")

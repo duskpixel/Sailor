@@ -7,8 +7,10 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -243,32 +245,76 @@ func (s *Server) opsFor(clusterID int64, loader func() (string, error)) *resops.
 	return &resops.Ops{ClusterID: clusterID, Pool: s.Pool, Loader: loader}
 }
 
-// ClusterNameLister 构建 kubectl 终端 Tab 补全用的资源名列表器：
-// 读同步缓存（微秒级），大集群也不卡；缓存未同步的类型自然无候选。
-func ClusterNameLister(st *store.Store) ksh.NamesFn {
-	return func(clusterID int64, kind, ns string) []string {
-		entry := st.GetCache(clusterID, kind)
-		if entry == nil {
-			return nil
+// kshNameCache Tab 补全的内存缓存：集群缓存文件在大集群上是几十 MB 的
+// JSON（16k Pod 实测一次全量读盘 + 解码要数秒），绝不能每按一次 Tab 都
+// 付一遍。按 (cluster,kind) 缓存轻量名字表，30s 过期（同步周期 60s，
+// 补全对新鲜度不敏感）。
+type kshNameCache struct {
+	mu      sync.Mutex
+	entries map[string]kshNameEntry
+}
+
+type kshNameEntry struct {
+	pairs []kshNameNS
+	at    time.Time
+}
+
+type kshNameNS struct{ name, ns string }
+
+const kshNameCacheTTL = 30 * time.Second
+
+func (c *kshNameCache) get(st *store.Store, clusterID int64, kind string) []kshNameNS {
+	key := strconv.FormatInt(clusterID, 10) + "/" + kind
+	c.mu.Lock()
+	if e, ok := c.entries[key]; ok && time.Since(e.at) < kshNameCacheTTL {
+		c.mu.Unlock()
+		return e.pairs
+	}
+	c.mu.Unlock()
+
+	entry := st.GetCache(clusterID, kind)
+	var pairs []kshNameNS
+	if entry != nil {
+		// 只解 name/namespace 两个字段，比解成通用 map 便宜一个量级
+		var rows []struct {
+			Name      string `json:"name"`
+			Namespace string `json:"namespace"`
 		}
-		var rows []map[string]interface{}
-		if json.Unmarshal(entry.Data, &rows) != nil {
-			return nil
-		}
-		names := make([]string, 0, len(rows))
-		for _, r := range rows {
-			name, _ := r["name"].(string)
-			if name == "" {
-				continue
-			}
-			if ns != "" {
-				if rns, _ := r["namespace"].(string); rns != ns {
-					continue
+		if json.Unmarshal(entry.Data, &rows) == nil {
+			for _, r := range rows {
+				if r.Name != "" {
+					pairs = append(pairs, kshNameNS{r.Name, r.Namespace})
 				}
 			}
-			names = append(names, name)
+			sort.Slice(pairs, func(i, j int) bool { return pairs[i].name < pairs[j].name })
 		}
-		sortStrings(names)
+	}
+
+	c.mu.Lock()
+	if c.entries == nil {
+		c.entries = map[string]kshNameEntry{}
+	}
+	c.entries[key] = kshNameEntry{pairs: pairs, at: time.Now()}
+	c.mu.Unlock()
+	return pairs
+}
+
+// ClusterNameLister 构建 kubectl 终端 Tab 补全用的资源名列表器：
+// 读同步缓存 + 30s 内存缓存（见 kshNameCache），大集群按 Tab 不再
+// 触发读盘解码；缓存未同步的类型自然无候选。
+func ClusterNameLister(st *store.Store) ksh.NamesFn {
+	cache := &kshNameCache{}
+	return func(clusterID int64, kind, ns string) []string {
+		pairs := cache.get(st, clusterID, kind)
+		if pairs == nil {
+			return nil
+		}
+		names := make([]string, 0, len(pairs))
+		for _, p := range pairs {
+			if ns == "" || p.ns == ns {
+				names = append(names, p.name)
+			}
+		}
 		return names
 	}
 }

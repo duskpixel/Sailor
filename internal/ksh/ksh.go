@@ -246,7 +246,13 @@ func (m *Manager) Open(clusterID int64, clusterName string, kubeconfigLoader fun
 	s.ID = newToken()
 	s.liner = newLiner(promptFor(clusterName), s.out, s.submitLine, s.Close)
 	s.liner.onTab = func(line string) (insert string, options []string) {
-		return s.complete(string(line))
+		// 补全跑在 WS 读循环里，任何 panic 都会带崩整个应用——兜住
+		defer func() {
+			if r := recover(); r != nil {
+				insert, options = "", nil
+			}
+		}()
+		return s.complete(line)
 	}
 	// 输出也算活跃：断连后持续产出的会话（logs -f）不该被空闲回收
 	s.out.onTouch = s.touch
